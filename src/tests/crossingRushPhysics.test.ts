@@ -65,6 +65,35 @@ describe('Crossing Rush world and physics', () => {
     expect(controller.player.col).toBeGreaterThan(1)
   })
 
+  it('uses the full visible log length as the safe standing area', () => {
+    const { controller } = makeController()
+    controller.rows[3] = { index: 3, type: 'water', obstacles: [], coinCol: null, mover: { kind: 'log', speed: 0, length: 4, gap: 4, offset: 0, color: '#9a542c' } }
+    controller.player = { col: 3.98, row: 3, drawCol: 3.98, drawRow: 3, hop: 0, facing: 'right', riding: false }
+
+    controller.update(.02)
+
+    expect(controller.getStatus()).toBe('playing')
+    expect(controller.player.riding).toBe(true)
+  })
+
+  it('does not hit traffic while visibly airborne or outside the painted body', () => {
+    const { controller } = makeController()
+    controller.rows[3] = { index: 3, type: 'road', obstacles: [], coinCol: null, mover: { kind: 'car', speed: 0, length: 1, gap: 7, offset: 2, color: '#f04f43' } }
+    controller.player = { col: 2.5, row: 3, drawCol: 2.5, drawRow: 3, hop: .5, facing: 'up', riding: false }
+
+    controller.update(.02)
+    expect(controller.getStatus()).toBe('playing')
+
+    controller.player.hop = 0
+    controller.player.col = 3.12
+    controller.update(.02)
+    expect(controller.getStatus()).toBe('playing')
+
+    controller.player.col = 3.08
+    controller.update(.02)
+    expect(controller.getStatus()).toBe('finished')
+  })
+
   it('ends the run when the player lands in water between logs', () => {
     const { controller, onFinish } = makeController()
     controller.rows[3] = { index: 3, type: 'water', obstacles: [], coinCol: null, mover: { kind: 'log', speed: 0, length: 1, gap: 7, offset: 2, color: '#9a542c' } }

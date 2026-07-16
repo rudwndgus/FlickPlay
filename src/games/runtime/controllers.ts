@@ -809,6 +809,7 @@ type CrossingRow = { index: number; type: CrossingRowKind; mover: CrossingMover 
 type CrossingSpan = { start: number; end: number }
 
 const CROSSING_COLS = 8
+const CROSSING_PLAYER_HIT_HALF = .1
 const crossingModulo = (value: number, divisor: number) => ((value % divisor) + divisor) % divisor
 
 class CrossingRushController extends BaseController {
@@ -909,7 +910,10 @@ class CrossingRushController extends BaseController {
   pointerUp(x: number, y: number) { if (this.drag) { this.swipe(x - this.drag.x, y - this.drag.y); this.drag = null } }
   autopilot() { const roll = this.nextRandom(); this.swipe(roll < .68 ? 0 : roll < .84 ? -55 : 55, roll < .68 ? -70 : 0) }
 
-  private moverAt(row: CrossingRow, x: number, padding = 0) { return this.spansFor(row).find((span) => x >= span.start + padding && x <= span.end - padding) }
+  private moverAt(row: CrossingRow, x: number) { return this.spansFor(row).find((span) => x >= span.start && x <= span.end) }
+  private vehicleTouchesPlayer(row: CrossingRow) {
+    return this.spansFor(row).some((span) => this.player.col + CROSSING_PLAYER_HIT_HALF >= span.start && this.player.col - CROSSING_PLAYER_HIT_HALF <= span.end)
+  }
 
   private collectCoin() {
     const row = this.rows[this.player.row], key = `${this.player.row},${row?.coinCol}`
@@ -924,13 +928,13 @@ class CrossingRushController extends BaseController {
     this.ensureRows(this.player.row + 28)
     this.player.hop = Math.max(0, this.player.hop - dt * 4.2)
     const row = this.rows[this.player.row]
-    if (row?.type === 'water' && this.player.hop < .1) {
-      const log = this.moverAt(row, this.player.col, .18)
+    if (row?.type === 'water' && this.player.hop === 0) {
+      const log = this.moverAt(row, this.player.col)
       if (!log) { this.crashFlash = 1; this.finish(); return }
       this.player.riding = true; this.player.col += (row.mover?.speed ?? 0) * dt
       if (this.player.col < -.35 || this.player.col > CROSSING_COLS - .65) { this.crashFlash = 1; this.finish(); return }
     } else if (row?.type !== 'water') this.player.riding = false
-    if (row?.type === 'road' && this.player.hop < .55 && this.moverAt(row, this.player.col, -.18)) { this.crashFlash = 1; this.finish(); return }
+    if (row?.type === 'road' && this.player.hop === 0 && this.vehicleTouchesPlayer(row)) { this.crashFlash = 1; this.finish(); return }
     if (this.player.hop < .08) this.collectCoin()
     this.player.drawCol += (this.player.col - this.player.drawCol) * Math.min(1, dt * 15)
     this.player.drawRow += (this.player.row - this.player.drawRow) * Math.min(1, dt * 13)
