@@ -108,16 +108,16 @@ describe('Loop Hoops physics', () => {
     expect(lateDrain).toBeGreaterThan(earlyDrain * 1.55)
   })
 
-  it('enters fire mode after three consecutive clean shots', () => {
+  it('enters fire mode and escalates points on consecutive clean shots', () => {
     const { controller } = makeController()
-    for (let shot = 0; shot < 3; shot++) {
+    for (let shot = 0; shot < 4; shot++) {
       controller.rimHits = 0; controller.touchedSurface = false
       controller.ball.x = controller.target.x; controller.ball.y = controller.target.y - 8; controller.ball.vx = 0; controller.ball.vy = 500
       controller.update(.03)
     }
 
-    expect(controller.cleanStreak).toBe(3)
-    expect(controller.getScore()).toBe(6)
+    expect(controller.cleanStreak).toBe(4)
+    expect(controller.getScore()).toBe(10)
   })
 
   it('reflects cleanly from the visible backboard face', () => {

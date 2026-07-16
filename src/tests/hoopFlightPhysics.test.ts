@@ -4,7 +4,7 @@ import type { GameController } from '../games/types'
 
 type InternalHoopFlight = GameController & {
   ball: { x: number; y: number; vx: number; vy: number; r: number; collisionCooldown: number }
-  hoops: Array<{ x: number; y: number; passed: boolean; pulse: number; netPunch?: number }>
+  hoops: Array<{ x: number; y: number; passed: boolean; pulse: number; netPunch?: number; rimTouched?: boolean }>
   speed: number
   cleanStreak: number
   scoreEffects: Array<{ label: string; streak: number }>
@@ -31,11 +31,14 @@ describe('Hoop Flight physics', () => {
     controller.ball.y = hoop.y
     controller.ball.vx = 0
     controller.ball.vy = 20
+    controller.cleanStreak = 3
 
     controller.update(1 / 60)
 
     expect(controller.ball.vx).toBeLessThan(-150)
     expect(controller.ball.collisionCooldown).toBeGreaterThan(0)
+    expect(controller.cleanStreak).toBe(0)
+    expect(controller.hoops[0].rimTouched).toBe(true)
   })
 
   it('scores only when the ball descends through the rim opening', () => {
@@ -73,7 +76,7 @@ describe('Hoop Flight physics', () => {
 
   it('escalates consecutive clean shots into combo effects', () => {
     const { controller } = makeController()
-    for (let shot = 0; shot < 3; shot++) {
+    for (let shot = 0; shot < 4; shot++) {
       const hoop = { x: 275, y: 370, passed: false, pulse: 0 }
       controller.hoops = [hoop]
       controller.ball.x = hoop.x
@@ -83,9 +86,9 @@ describe('Hoop Flight physics', () => {
       controller.update(.03)
     }
 
-    expect(controller.cleanStreak).toBe(3)
-    expect(controller.getScore()).toBe(6)
-    expect(controller.scoreEffects.at(-1)?.label).toBe('FIRE ×3')
+    expect(controller.cleanStreak).toBe(4)
+    expect(controller.getScore()).toBe(10)
+    expect(controller.scoreEffects.at(-1)?.label).toBe('FIRE ×4  +4')
   })
 
   it('ends the run as soon as an unscored hoop passes behind the ball', () => {

@@ -1,6 +1,8 @@
 import type { ControllerOptions, GameController, GameStatus, GameTheme } from '../types'
 
 type Point = { x: number; y: number }
+const FIRE_STREAK = 3
+const MAX_CLEAN_COMBO = 5
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
@@ -53,7 +55,7 @@ abstract class BaseController implements GameController {
   }
 }
 
-type Hoop = { x: number; y: number; passed: boolean; pulse: number; netSwing?: number; netVelocity?: number; netPunch?: number }
+type Hoop = { x: number; y: number; passed: boolean; pulse: number; netSwing?: number; netVelocity?: number; netPunch?: number; rimTouched?: boolean }
 type HoopScoreEffect = { x: number; y: number; life: number; label: string; clean: boolean; streak: number }
 
 class HoopFlightController extends BaseController {
@@ -131,10 +133,10 @@ class HoopFlightController extends BaseController {
       const crossedRimPlane = previousY <= hoop.y && this.ball.y > hoop.y
       if (!hoop.passed && insideOpening && crossedRimPlane && this.ball.vy > 0) {
         hoop.passed = true; hoop.pulse = 1
-        const clean = Math.abs(this.ball.x - hoop.x) < metrics.rimHalf * .42
+        const clean = !hoop.rimTouched && Math.abs(this.ball.x - hoop.x) < metrics.rimHalf * .42
         this.cleanStreak = clean ? this.cleanStreak + 1 : 0
-        const points = clean ? (this.cleanStreak >= 3 ? 3 : this.cleanStreak === 2 ? 2 : 1) : 1
-        const label = clean ? (this.cleanStreak >= 3 ? `FIRE ×${this.cleanStreak}` : this.cleanStreak === 2 ? 'PERFECT ×2' : 'CLEAN!') : 'SWISH!'
+        const points = clean ? Math.min(MAX_CLEAN_COMBO, this.cleanStreak) : 1
+        const label = clean ? (this.cleanStreak >= FIRE_STREAK ? `FIRE ×${this.cleanStreak}  +${points}` : this.cleanStreak === 2 ? 'PERFECT ×2  +2' : 'CLEAN!  +1') : 'SWISH!  +1'
         this.setScore(this.score + points)
         this.options.onImpact(clean ? 'perfect' : 'score')
         hoop.netVelocity = clamp((this.ball.x - hoop.x) * 5.5 + 175, -220, 220)
@@ -145,7 +147,7 @@ class HoopFlightController extends BaseController {
         this.ball.kick = Math.max(this.ball.kick, .72)
         this.scoreEffects.push({ x: hoop.x, y: hoop.y, life: 1, label, clean, streak: this.cleanStreak })
         this.scoreFlash = clean ? .9 : .58
-        if (this.cleanStreak >= 3) this.fireBurst = 1
+        if (this.cleanStreak >= FIRE_STREAK) this.fireBurst = 1
       } else if (!hoop.passed && hoop.x + metrics.rimHalf < this.ball.x - this.ball.r) {
         missedHoop = true
         break
@@ -169,7 +171,7 @@ class HoopFlightController extends BaseController {
     ctx.fillStyle = '#f2bd3f'; ctx.fillRect(0, this.h - 61, this.w, 61)
     ctx.fillStyle = 'rgba(82,72,54,.3)'; ctx.font = `900 ${Math.min(88, this.w * .2)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(this.score), this.w * .55, this.h * .52)
     for (const hoop of this.hoops) this.drawHoopLayer(ctx, hoop, false)
-    ctx.save(); ctx.translate(this.ball.x, this.ball.y); ctx.scale(1 + this.ball.kick * .16, 1 - this.ball.kick * .1); drawBasketball(ctx, 0, 0, this.ball.r, this.ball.rotation, this.cleanStreak >= 3); ctx.restore()
+    ctx.save(); ctx.translate(this.ball.x, this.ball.y); ctx.scale(1 + this.ball.kick * .16, 1 - this.ball.kick * .1); drawBasketball(ctx, 0, 0, this.ball.r, this.ball.rotation, this.cleanStreak >= FIRE_STREAK); ctx.restore()
     for (const hoop of this.hoops) this.drawHoopLayer(ctx, hoop, true)
     this.drawScoreEffects(ctx)
     if (this.fireBurst > 0) { ctx.strokeStyle = `rgba(255,75,25,${this.fireBurst * .7})`; ctx.lineWidth = 8 + this.fireBurst * 7; ctx.shadowColor = '#ff6a24'; ctx.shadowBlur = 28; ctx.strokeRect(4, 88, this.w - 8, this.h - 164); ctx.shadowBlur = 0 }
@@ -215,10 +217,12 @@ class HoopFlightController extends BaseController {
         this.ball.vy -= bounce * ny
       }
       this.ball.vx = Math.min(this.ball.vx, -155)
-      this.registerHoopImpact(); return
+      this.registerHoopImpact(metrics.hoop); return
     }
   }
-  private registerHoopImpact() {
+  private registerHoopImpact(hoop: Hoop) {
+    hoop.rimTouched = true
+    this.cleanStreak = 0
     this.ball.collisionCooldown = .075
     this.ball.kick = Math.max(this.ball.kick, .5)
     this.options.onImpact('tap')
@@ -382,10 +386,13 @@ class DunkClimbController extends BaseController {
       this.targetHoop.netSwing = clamp((this.ball.x - this.targetHoop.x) * .7, -18, 18)
       const clean = this.rimHits === 0
       const wallShot = this.wallBounces > 0
-      const points = 1 + (clean ? 1 : 0) + (wallShot ? 1 : 0)
       this.cleanStreak = clean ? this.cleanStreak + 1 : 0
+      const cleanBonus = clean ? Math.min(MAX_CLEAN_COMBO, this.cleanStreak) : 0
+      const points = 1 + cleanBonus + (wallShot ? 1 : 0)
       this.lastShotPoints = points
-      this.scoreLabel = wallShot && clean ? 'WALL + CLEAN  +3' : wallShot ? 'BANK SHOT  +2' : clean ? 'CLEAN SHOT  +2' : 'SWISH  +1'
+      this.scoreLabel = clean && this.cleanStreak >= FIRE_STREAK
+        ? `FIRE ×${this.cleanStreak}  +${points}`
+        : wallShot && clean ? `WALL + CLEAN  +${points}` : wallShot ? 'BANK SHOT  +2' : clean ? `CLEAN ×${this.cleanStreak}  +${points}` : 'SWISH  +1'
       this.setScore(this.score + points); this.options.onImpact(points > 1 ? 'perfect' : 'score')
       this.scoreEffect = 1; this.transitionDelay = .34; this.ball.flying = false
     }
@@ -402,7 +409,7 @@ class DunkClimbController extends BaseController {
     ctx.fillStyle = 'rgba(80,80,86,.45)'; ctx.font = '900 17px system-ui'; ctx.fillText('DUNK CLIMB', this.w * .5, 62)
     this.drawHoopLayer(ctx, this.launchHoop, false); this.drawHoopLayer(ctx, this.targetHoop, false)
     if (this.dragStart && this.dragPoint) this.drawAimGuide(ctx)
-    this.drawTrail(ctx); drawBasketball(ctx, this.ball.x, this.ball.y, this.ball.r, this.ball.rotation, this.cleanStreak >= 3)
+    this.drawTrail(ctx); drawBasketball(ctx, this.ball.x, this.ball.y, this.ball.r, this.ball.rotation, this.cleanStreak >= FIRE_STREAK)
     this.drawHoopLayer(ctx, this.launchHoop, true); this.drawHoopLayer(ctx, this.targetHoop, true)
     if (this.scoreEffect > 0) this.drawScoreEffect(ctx)
     if (this.rescueEffect > 0) this.drawRescueEffect(ctx)
@@ -463,7 +470,7 @@ class DunkClimbController extends BaseController {
       const impact = this.ball.vx * nx + this.ball.vy * ny
       if (impact < 0) { this.ball.vx -= 1.72 * impact * nx; this.ball.vy -= 1.72 * impact * ny }
       this.ball.collisionCooldown = .065
-      if (hoop === this.targetHoop) this.rimHits++
+      if (hoop === this.targetHoop) { this.rimHits++; this.cleanStreak = 0 }
       hoop.netSwing = clamp(this.ball.vx * .035, -24, 24); this.options.onImpact('tap'); return
     }
   }
@@ -495,10 +502,12 @@ class DunkClimbController extends BaseController {
   private drawTrail(ctx: CanvasRenderingContext2D) {
     if (!this.ball.flying) return
     this.trail.forEach((point, index) => {
-      const alpha = point.life / .38 * .22
-      ctx.fillStyle = this.cleanStreak >= 3 ? `rgba(255,91,24,${alpha * 2})` : `rgba(115,115,120,${alpha})`
+      const alpha = point.life / .38 * .22, fire = this.cleanStreak >= FIRE_STREAK
+      ctx.fillStyle = fire ? (index < 4 ? `rgba(255,238,45,${alpha * 3.2})` : index < 9 ? `rgba(255,91,24,${alpha * 2.5})` : `rgba(180,25,16,${alpha * 1.7})`) : `rgba(115,115,120,${alpha})`
+      ctx.shadowColor = fire ? (index < 5 ? '#ffe82d' : '#ff4d1c') : 'transparent'; ctx.shadowBlur = fire ? 18 : 0
       ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(3, this.ball.r - index * .85), 0, Math.PI * 2); ctx.fill()
     })
+    ctx.shadowBlur = 0
   }
   private drawScoreEffect(ctx: CanvasRenderingContext2D) {
     const alpha = Math.min(1, this.scoreEffect * 1.8), rise = (1 - this.scoreEffect) * 52
@@ -566,13 +575,13 @@ class LoopHoopsController extends BaseController {
     this.target.netPunch = Math.max(0, this.target.netPunch - dt * 3)
     this.scoreEffect.life = Math.max(0, this.scoreEffect.life - dt * 1.35)
     this.trail.forEach((point) => { point.life -= dt }); this.trail = this.trail.filter((point) => point.life > 0)
-    this.trail.unshift({ x: this.ball.x, y: this.ball.y, life: this.cleanStreak >= 3 ? .62 : .3 })
-    if (this.trail.length > (this.cleanStreak >= 3 ? 22 : 11)) this.trail.pop()
+    this.trail.unshift({ x: this.ball.x, y: this.ball.y, life: this.cleanStreak >= FIRE_STREAK ? .62 : .3 })
+    if (this.trail.length > (this.cleanStreak >= FIRE_STREAK ? 22 : 11)) this.trail.pop()
 
     const ceiling = 104 + this.ball.r, floor = this.h - 74 - this.ball.r
-    if (this.ball.y < ceiling) { this.ball.y = ceiling; this.ball.vy = Math.abs(this.ball.vy) * .72; this.touchedSurface = true }
+    if (this.ball.y < ceiling) { this.ball.y = ceiling; this.ball.vy = Math.abs(this.ball.vy) * .72; this.touchedSurface = true; this.cleanStreak = 0 }
     if (this.ball.y > floor) {
-      this.ball.y = floor; this.ball.vy = -Math.max(350, Math.abs(this.ball.vy) * .72); this.ball.kick = .55; this.touchedSurface = true; this.options.onImpact('tap')
+      this.ball.y = floor; this.ball.vy = -Math.max(350, Math.abs(this.ball.vy) * .72); this.ball.kick = .55; this.touchedSurface = true; this.cleanStreak = 0; this.options.onImpact('tap')
     }
 
     this.collideWithRimUnderside(previous)
@@ -592,7 +601,7 @@ class LoopHoopsController extends BaseController {
     this.drawSideHoopImage(ctx, false)
     this.drawBallTrail(ctx)
     ctx.fillStyle = 'rgba(20,10,6,.34)'; ctx.beginPath(); ctx.ellipse(this.ball.x, this.h - 70, 22 + Math.abs(this.ball.y - (this.h - 70)) * .015, 7, 0, 0, Math.PI * 2); ctx.fill()
-    ctx.save(); ctx.translate(this.ball.x, this.ball.y); ctx.scale(1 + this.ball.kick * .16, 1 - this.ball.kick * .1); drawBasketball(ctx, 0, 0, this.ball.r, this.ball.rotation, this.cleanStreak >= 3); ctx.restore()
+    ctx.save(); ctx.translate(this.ball.x, this.ball.y); ctx.scale(1 + this.ball.kick * .16, 1 - this.ball.kick * .1); drawBasketball(ctx, 0, 0, this.ball.r, this.ball.rotation, this.cleanStreak >= FIRE_STREAK); ctx.restore()
     this.drawSideHoopImage(ctx, true)
     this.drawScoreEffect(ctx)
     ctx.fillStyle = 'rgba(255,255,255,.62)'; ctx.font = '800 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('TAP TO BOUNCE  •  BEAT THE CLOCK', this.w * .5, this.h - 38)
@@ -600,9 +609,9 @@ class LoopHoopsController extends BaseController {
   private scoreGoal() {
     const clean = this.rimHits === 0 && !this.touchedSurface
     this.cleanStreak = clean ? this.cleanStreak + 1 : 0
-    const points = clean ? Math.min(3, this.cleanStreak) : 1
+    const points = clean ? Math.min(MAX_CLEAN_COMBO, this.cleanStreak) : 1
     this.setScore(this.score + points); this.options.onImpact(clean ? 'perfect' : 'score')
-    this.scoreEffect = { life: 1, label: clean ? (this.cleanStreak >= 3 ? `PERFECT ×${this.cleanStreak}` : this.cleanStreak === 2 ? 'PERFECT ×2' : 'CLEAN!') : 'SCORE!', points }
+    this.scoreEffect = { life: 1, label: clean ? (this.cleanStreak >= FIRE_STREAK ? `FIRE ×${this.cleanStreak}  +${points}` : this.cleanStreak === 2 ? 'PERFECT ×2  +2' : 'CLEAN!  +1') : 'SCORE!  +1', points }
     this.timeLeft = 1
     this.target.side = this.target.side === -1 ? 1 : -1
     this.target.x = this.sideHoopAnchorX(this.target.side)
@@ -720,7 +729,7 @@ class LoopHoopsController extends BaseController {
   }
   private drawBallTrail(ctx: CanvasRenderingContext2D) {
     this.trail.forEach((point, index) => {
-      const fire = this.cleanStreak >= 3, alpha = point.life / (fire ? .62 : .3)
+      const fire = this.cleanStreak >= FIRE_STREAK, alpha = point.life / (fire ? .62 : .3)
       ctx.fillStyle = fire ? (index < 5 ? `rgba(255,238,30,${alpha * .78})` : index < 13 ? `rgba(255,93,20,${alpha * .55})` : `rgba(196,30,25,${alpha * .3})`) : `rgba(26,15,12,${alpha * .16})`
       ctx.shadowColor = fire ? (index < 6 ? '#fff02b' : '#ff4b1f') : 'transparent'; ctx.shadowBlur = fire ? 18 : 0
       ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(4, this.ball.r - index * .48), 0, Math.PI * 2); ctx.fill()
@@ -730,7 +739,7 @@ class LoopHoopsController extends BaseController {
   private drawScoreEffect(ctx: CanvasRenderingContext2D) {
     if (this.scoreEffect.life <= 0) return
     const alpha = Math.min(1, this.scoreEffect.life * 2), rise = (1 - this.scoreEffect.life) * 34
-    ctx.save(); ctx.globalAlpha = alpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.shadowColor = this.cleanStreak >= 3 ? '#ff641f' : '#24160f'; ctx.shadowBlur = this.cleanStreak >= 3 ? 22 : 10
+    ctx.save(); ctx.globalAlpha = alpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.shadowColor = this.cleanStreak >= FIRE_STREAK ? '#ff641f' : '#24160f'; ctx.shadowBlur = this.cleanStreak >= FIRE_STREAK ? 22 : 10
     ctx.font = '900 76px system-ui'; ctx.fillText(String(this.score), this.w * .5, this.h * .46 - rise)
     ctx.font = '900 24px system-ui'; ctx.fillText(this.scoreEffect.label, this.w * .5, this.h * .46 + 56 - rise)
     ctx.restore()
@@ -926,7 +935,23 @@ class PocketGolfController extends BaseController {
 }
 
 const drawBasketball = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rotation: number, fire: boolean) => {
-  ctx.save(); ctx.translate(x, y); ctx.rotate(rotation); if (fire) { ctx.shadowColor = '#ffdb39'; ctx.shadowBlur = 28 }
+  ctx.save(); ctx.translate(x, y)
+  if (fire) {
+    const pulse = .5 + Math.sin(rotation * 2.7) * .5
+    ctx.save(); ctx.rotate(-rotation * .38); ctx.globalCompositeOperation = 'lighter'
+    const aura = ctx.createRadialGradient(0, 0, r * .45, 0, 0, r * (1.65 + pulse * .12))
+    aura.addColorStop(0, 'rgba(255,246,74,.72)'); aura.addColorStop(.48, 'rgba(255,111,24,.48)'); aura.addColorStop(1, 'rgba(255,37,8,0)')
+    ctx.fillStyle = aura; ctx.beginPath(); ctx.arc(0, 0, r * (1.72 + pulse * .12), 0, Math.PI * 2); ctx.fill()
+    for (let i = 0; i < 10; i++) {
+      ctx.save(); ctx.rotate(i * Math.PI * .2 + rotation * .17)
+      const length = r * (1.42 + ((i + Math.round(pulse * 2)) % 3) * .13)
+      ctx.fillStyle = i % 2 ? 'rgba(255,71,13,.82)' : 'rgba(255,218,35,.88)'
+      ctx.shadowColor = i % 2 ? '#ff3d0d' : '#ffe52a'; ctx.shadowBlur = 13
+      ctx.beginPath(); ctx.moveTo(-r * .28, -r * .72); ctx.quadraticCurveTo(-r * .18, -r * 1.08, 0, -length); ctx.quadraticCurveTo(r * .2, -r * 1.05, r * .28, -r * .72); ctx.closePath(); ctx.fill(); ctx.restore()
+    }
+    ctx.restore()
+  }
+  ctx.rotate(rotation); if (fire) { ctx.shadowColor = '#ffdb39'; ctx.shadowBlur = 30 }
   const gradient = ctx.createRadialGradient(-r * .3, -r * .35, 2, 0, 0, r); gradient.addColorStop(0, '#ffb340'); gradient.addColorStop(1, '#df5224'); ctx.fillStyle = gradient; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill()
   ctx.strokeStyle = '#6f271f'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.moveTo(0, -r); ctx.bezierCurveTo(-r * .55, -r * .2, -r * .55, r * .2, 0, r); ctx.moveTo(0, -r); ctx.bezierCurveTo(r * .55, -r * .2, r * .55, r * .2, 0, r); ctx.stroke(); ctx.restore()
 }

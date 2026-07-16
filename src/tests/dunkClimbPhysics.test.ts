@@ -13,7 +13,9 @@ type DunkController = GameController & {
   climbRemaining: number
   wallBounces: number
   rimHits: number
+  cleanStreak: number
   scoreLabel: string
+  lastShotPoints: number
   getRimGeometry: (hoop: DunkController['targetHoop']) => { left: { x: number; y: number }; right: { x: number; y: number }; tubeRadius: number }
   collideWithRims: (hoop: DunkController['targetHoop']) => void
 }
@@ -113,6 +115,22 @@ describe('Dunk Climb physics', () => {
 
     expect(controller.getScore()).toBe(2)
     expect(controller.scoreLabel).toBe('BANK SHOT  +2')
+  })
+
+  it('ignites and escalates points after consecutive clean shots', () => {
+    const { controller } = makeController()
+    for (let shot = 0; shot < 3; shot++) {
+      controller.targetHoop.passed = false; controller.transitionDelay = 0
+      controller.rimHits = 0; controller.wallBounces = 0
+      controller.ball.x = controller.targetHoop.x; controller.ball.y = controller.targetHoop.y - 7
+      controller.ball.vx = 0; controller.ball.vy = 500; controller.ball.flying = true
+      controller.update(.03)
+    }
+
+    expect(controller.cleanStreak).toBe(3)
+    expect(controller.lastShotPoints).toBe(4)
+    expect(controller.getScore()).toBe(9)
+    expect(controller.scoreLabel).toBe('FIRE ×3  +4')
   })
 
   it('matches rim collisions to the visible sprite endpoints and thickness', () => {
