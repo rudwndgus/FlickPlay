@@ -265,7 +265,8 @@ class DunkClimbController extends BaseController {
   private targetHoop: Hoop = { x: 220, y: 290, passed: false, pulse: 0, netSwing: 0, netPunch: 0 }
   private dragStart: Point | null = null
   private dragPoint: Point | null = null
-  private bounces = 0
+  private wallBounces = 0
+  private rimHits = 0
   private autoClock = 0
   private transitionDelay = 0
   private rescueDelay = 0
@@ -273,6 +274,8 @@ class DunkClimbController extends BaseController {
   private cleanStreak = 0
   private trail: Array<Point & { life: number }> = []
   private scoreEffect = 0
+  private scoreLabel = 'SWISH  +1'
+  private lastShotPoints = 1
   private rescueEffect = 0
   private readonly hoopImage: HTMLImageElement
   private readonly gravity = 900
@@ -283,8 +286,8 @@ class DunkClimbController extends BaseController {
     this.launchHoop = { x: this.w * .5, y: launchY, passed: true, pulse: 0, netSwing: 0, netPunch: 0 }
     this.targetHoop = this.createTarget(launchY - this.h * .27)
     this.ball = { x: this.launchHoop.x, y: this.launchHoop.y - 14, vx: 0, vy: 0, r: 19, flying: false, rotation: 0, collisionCooldown: 0 }
-    this.dragStart = null; this.dragPoint = null; this.bounces = 0; this.autoClock = 0
-    this.transitionDelay = 0; this.rescueDelay = 0; this.climbRemaining = 0; this.cleanStreak = 0; this.trail = []; this.scoreEffect = 0; this.rescueEffect = 0
+    this.dragStart = null; this.dragPoint = null; this.wallBounces = 0; this.rimHits = 0; this.autoClock = 0
+    this.transitionDelay = 0; this.rescueDelay = 0; this.climbRemaining = 0; this.cleanStreak = 0; this.trail = []; this.scoreEffect = 0; this.scoreLabel = 'SWISH  +1'; this.lastShotPoints = 1; this.rescueEffect = 0
   }
   constructor(theme: GameTheme, options: ControllerOptions) {
     super(theme, options)
@@ -317,6 +320,7 @@ class DunkClimbController extends BaseController {
     }
     this.ball.vx = dx * this.shotPower; this.ball.vy = dy * this.shotPower
     this.ball.flying = true; this.ball.collisionCooldown = .08
+    this.wallBounces = 0; this.rimHits = 0
     this.launchHoop.netPunch = 1; this.launchHoop.netSwing = clamp(-dx * .38, -28, 28)
     this.dragStart = null; this.dragPoint = null; this.trail = []; this.options.onImpact('tap')
   }
@@ -344,7 +348,7 @@ class DunkClimbController extends BaseController {
       this.ball.rotation += dt * 3
       if (this.rescueDelay <= 0) {
         this.ball.x = this.launchHoop.x; this.ball.y = this.launchHoop.y - 14
-        this.ball.vx = 0; this.ball.vy = 0; this.ball.flying = false; this.bounces = 0; this.trail = []
+        this.ball.vx = 0; this.ball.vy = 0; this.ball.flying = false; this.wallBounces = 0; this.rimHits = 0; this.trail = []
       }
       return
     }
@@ -368,16 +372,20 @@ class DunkClimbController extends BaseController {
     this.ball.rotation += dt * (4 + Math.abs(this.ball.vx) * .009)
     this.trail.unshift({ x: this.ball.x, y: this.ball.y, life: .38 }); if (this.trail.length > 14) this.trail.pop()
     if (this.ball.x < this.ball.r || this.ball.x > this.w - this.ball.r) {
-      this.ball.x = clamp(this.ball.x, this.ball.r, this.w - this.ball.r); this.ball.vx *= -.76; this.bounces++; this.options.onImpact('tap')
+      this.ball.x = clamp(this.ball.x, this.ball.r, this.w - this.ball.r); this.ball.vx *= -.76; this.wallBounces++; this.options.onImpact('tap')
     }
     this.collideWithRims(this.launchHoop); this.collideWithRims(this.targetHoop)
     const insideOpening = Math.abs(this.ball.x - this.targetHoop.x) < this.hoopWidth() * .36
     if (!this.targetHoop.passed && lastY <= this.targetHoop.y && this.ball.y > this.targetHoop.y && this.ball.vy > 0 && insideOpening) {
       this.targetHoop.passed = true; this.targetHoop.pulse = 1; this.targetHoop.netPunch = 1
       this.targetHoop.netSwing = clamp((this.ball.x - this.targetHoop.x) * .7, -18, 18)
-      const clean = Math.abs(this.ball.x - this.targetHoop.x) < this.hoopWidth() * .18 && this.bounces === 0
+      const clean = this.rimHits === 0
+      const wallShot = this.wallBounces > 0
+      const points = 1 + (clean ? 1 : 0) + (wallShot ? 1 : 0)
       this.cleanStreak = clean ? this.cleanStreak + 1 : 0
-      this.setScore(this.score + 1); this.options.onImpact(clean ? 'perfect' : 'score')
+      this.lastShotPoints = points
+      this.scoreLabel = wallShot && clean ? 'WALL + CLEAN  +3' : wallShot ? 'BANK SHOT  +2' : clean ? 'CLEAN SHOT  +2' : 'SWISH  +1'
+      this.setScore(this.score + points); this.options.onImpact(points > 1 ? 'perfect' : 'score')
       this.scoreEffect = 1; this.transitionDelay = .34; this.ball.flying = false
     }
     const returnedToLaunch = !this.targetHoop.passed && lastY <= this.launchHoop.y && this.ball.y > this.launchHoop.y && this.ball.vy > 0 && Math.abs(this.ball.x - this.launchHoop.x) < this.hoopWidth() * .25
@@ -407,7 +415,7 @@ class DunkClimbController extends BaseController {
     this.launchHoop = { ...this.targetHoop, passed: true, pulse: 0, netPunch: 0 }
     this.targetHoop = this.createTarget(this.launchHoop.y - this.h * .27)
     this.ball = { x: this.launchHoop.x, y: this.launchHoop.y - 14, vx: 0, vy: 0, r: 19, flying: false, rotation: this.ball.rotation, collisionCooldown: 0 }
-    this.bounces = 0; this.trail = []; this.climbRemaining = 0
+    this.wallBounces = 0; this.rimHits = 0; this.trail = []; this.climbRemaining = 0
   }
   private hoopWidth() { return Math.min(112, this.w * .29) }
   private collideWithRims(hoop: Hoop) {
@@ -420,7 +428,9 @@ class DunkClimbController extends BaseController {
       this.ball.x += nx * overlap; this.ball.y += ny * overlap
       const impact = this.ball.vx * nx + this.ball.vy * ny
       if (impact < 0) { this.ball.vx -= 1.72 * impact * nx; this.ball.vy -= 1.72 * impact * ny }
-      this.ball.collisionCooldown = .065; this.bounces++; hoop.netSwing = clamp(this.ball.vx * .035, -24, 24); this.options.onImpact('tap'); return
+      this.ball.collisionCooldown = .065
+      if (hoop === this.targetHoop) this.rimHits++
+      hoop.netSwing = clamp(this.ball.vx * .035, -24, 24); this.options.onImpact('tap'); return
     }
   }
   private drawAimGuide(ctx: CanvasRenderingContext2D) {
@@ -468,8 +478,8 @@ class DunkClimbController extends BaseController {
   }
   private drawScoreEffect(ctx: CanvasRenderingContext2D) {
     const alpha = Math.min(1, this.scoreEffect * 1.8), rise = (1 - this.scoreEffect) * 52
-    ctx.save(); ctx.globalAlpha = alpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = this.cleanStreak >= 2 ? '#ff6b22' : '#f19a2b'; ctx.shadowColor = '#ffb22d'; ctx.shadowBlur = 20
-    ctx.font = `900 ${this.cleanStreak >= 3 ? 31 : 25}px system-ui`; ctx.fillText(this.cleanStreak >= 3 ? `ON FIRE ×${this.cleanStreak}` : this.cleanStreak >= 2 ? `PERFECT ×${this.cleanStreak}` : 'SWISH!', this.targetHoop.x, this.targetHoop.y - 58 - rise)
+    ctx.save(); ctx.globalAlpha = alpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = this.lastShotPoints >= 3 ? '#ff5a22' : '#f19a2b'; ctx.shadowColor = '#ffb22d'; ctx.shadowBlur = 20
+    ctx.font = `900 ${this.lastShotPoints >= 3 ? 28 : 24}px system-ui`; ctx.fillText(this.scoreLabel, this.targetHoop.x, this.targetHoop.y - 58 - rise)
     ctx.restore()
   }
   private drawRescueEffect(ctx: CanvasRenderingContext2D) {

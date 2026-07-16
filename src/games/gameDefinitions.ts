@@ -18,7 +18,7 @@ const definitions: Definition[] = [
     fullDescription: '공을 뒤로 당겨 방향과 힘을 정한 뒤 놓으세요. 벽 반사와 클린샷을 조합하면 점수가 폭발합니다.',
     theme: { background: '#f1f1f2', surface: '#e5e5e7', accent: '#f19a2b', accent2: '#e94b2f', text: '#222226', muted: '#8a8a90', headerStyle: 'dark' },
     controls: [{ label: '드래그', description: '공을 당겨 예상 궤적과 파워를 정합니다.' }, { label: '놓기', description: '당긴 반대 방향으로 발사합니다.' }],
-    scoringRules: [{ label: '골', value: '+1' }, { label: '연속 클린샷', value: 'PERFECT / ON FIRE' }],
+    scoringRules: [{ label: '골', value: '+1' }, { label: '클린샷', value: '+1' }, { label: '벽 반사', value: '+1' }],
   },
   {
     id: 'loop-hoops', slug: 'loop-hoops', title: 'Loop Hoops', kicker: 'SIDE TO SIDE', icon: 'LH', category: 'Loop Basketball',

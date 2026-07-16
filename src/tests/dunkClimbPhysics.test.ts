@@ -11,6 +11,9 @@ type DunkController = GameController & {
   transitionDelay: number
   rescueDelay: number
   climbRemaining: number
+  wallBounces: number
+  rimHits: number
+  scoreLabel: string
 }
 
 const makeController = () => {
@@ -63,7 +66,7 @@ describe('Dunk Climb physics', () => {
 
     for (let frame = 0; frame < 180 && controller.getScore() === 0; frame++) controller.update(1 / 120)
 
-    expect(controller.getScore()).toBe(1)
+    expect(controller.getScore()).toBe(2)
   })
 
   it('scores a descending shot and starts the climb transition', () => {
@@ -74,11 +77,40 @@ describe('Dunk Climb physics', () => {
 
     controller.update(.03)
 
-    expect(controller.getScore()).toBe(1)
+    expect(controller.getScore()).toBe(2)
     expect(controller.targetHoop.passed).toBe(true)
     expect(controller.targetHoop.netPunch).toBe(1)
     expect(controller.transitionDelay).toBeGreaterThan(0)
-    expect(onScore).toHaveBeenCalledWith(1)
+    expect(onScore).toHaveBeenCalledWith(2)
+  })
+
+  it('stacks wall and clean-shot bonuses', () => {
+    const { controller, onScore } = makeController()
+    controller.wallBounces = 1
+    controller.rimHits = 0
+    controller.ball.x = controller.targetHoop.x
+    controller.ball.y = controller.targetHoop.y - 7
+    controller.ball.vx = 0; controller.ball.vy = 500; controller.ball.flying = true
+
+    controller.update(.03)
+
+    expect(controller.getScore()).toBe(3)
+    expect(controller.scoreLabel).toBe('WALL + CLEAN  +3')
+    expect(onScore).toHaveBeenCalledWith(3)
+  })
+
+  it('awards a wall bonus after a rim contact without a clean bonus', () => {
+    const { controller } = makeController()
+    controller.wallBounces = 1
+    controller.rimHits = 1
+    controller.ball.x = controller.targetHoop.x
+    controller.ball.y = controller.targetHoop.y - 7
+    controller.ball.vx = 0; controller.ball.vy = 500; controller.ball.flying = true
+
+    controller.update(.03)
+
+    expect(controller.getScore()).toBe(2)
+    expect(controller.scoreLabel).toBe('BANK SHOT  +2')
   })
 
   it('saves a missed shot that falls back through the launch hoop', () => {
