@@ -9,6 +9,7 @@ type DunkController = GameController & {
   dragStart: { x: number; y: number } | null
   dragPoint: { x: number; y: number } | null
   transitionDelay: number
+  rescueDelay: number
   climbRemaining: number
 }
 
@@ -44,7 +45,7 @@ describe('Dunk Climb physics', () => {
     controller.pointerMove(controller.ball.x + 500, controller.ball.y + 500)
 
     const anchorY = controller.launchHoop.y - 14
-    expect(Math.hypot(controller.ball.x - controller.launchHoop.x, controller.ball.y - anchorY)).toBeCloseTo(132, 4)
+    expect(Math.hypot(controller.ball.x - controller.launchHoop.x, controller.ball.y - anchorY)).toBeCloseTo(150, 4)
   })
 
   it('keeps the next hoop within the maximum shot arc', () => {
@@ -78,5 +79,25 @@ describe('Dunk Climb physics', () => {
     expect(controller.targetHoop.netPunch).toBe(1)
     expect(controller.transitionDelay).toBeGreaterThan(0)
     expect(onScore).toHaveBeenCalledWith(1)
+  })
+
+  it('saves a missed shot that falls back through the launch hoop', () => {
+    const { controller, onScore, onFinish } = makeController()
+    controller.ball.x = controller.launchHoop.x
+    controller.ball.y = controller.launchHoop.y - 8
+    controller.ball.vx = 0; controller.ball.vy = 480; controller.ball.flying = true
+
+    controller.update(.03)
+
+    expect(controller.rescueDelay).toBeGreaterThan(0)
+    expect(controller.getStatus()).toBe('playing')
+    expect(controller.getScore()).toBe(0)
+    expect(onScore).not.toHaveBeenCalled()
+    expect(onFinish).not.toHaveBeenCalled()
+
+    for (let frame = 0; frame < 40 && controller.rescueDelay > 0; frame++) controller.update(1 / 60)
+    expect(controller.ball.flying).toBe(false)
+    expect(controller.ball.x).toBe(controller.launchHoop.x)
+    expect(controller.ball.y).toBe(controller.launchHoop.y - 14)
   })
 })
