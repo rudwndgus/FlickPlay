@@ -1,4 +1,5 @@
 import type { ControllerOptions, GameController, GameStatus, GameTheme } from '../types'
+import { NeonVaultController } from './NeonVaultController'
 
 type Point = { x: number; y: number }
 const FIRE_STREAK = 3
@@ -1017,49 +1018,7 @@ class CrossingRushController extends BaseController {
   }
 }
 
-const MAZE = [
-  '1111111111', '1000000001', '1011011101', '1001000101', '1101010101', '1000010101', '1011110101', '1010000101', '1010111101', '1000000001', '1110110101', '1000100001', '1011101101', '1000000001', '1111111111',
-]
-class NeonEscapeController extends BaseController {
-  private player = { col: 1, row: 13, x: 1, y: 13, tx: 1, ty: 13, moving: false }
-  private monster = { x: 8, y: 1, phase: 0 }
-  private coins = new Set(['3,13', '8,11', '5,9', '2,5', '7,3'])
-  private drag: Point | null = null
-  private autoClock = 0
-  reset() { this.player = { col: 1, row: 13, x: 1, y: 13, tx: 1, ty: 13, moving: false }; this.monster = { x: 8, y: 1, phase: 0 }; this.coins = new Set(['3,13', '8,11', '5,9', '2,5', '7,3']); this.autoClock = 0 }
-  constructor(theme: GameTheme, options: ControllerOptions) { super(theme, options); this.reset() }
-  pointerDown(x: number, y: number) { this.drag = { x, y } }
-  pointerUp(x: number, y: number) { if (this.drag) { this.swipe(x - this.drag.x, y - this.drag.y); this.drag = null } }
-  swipe(dx: number, dy: number) {
-    if (this.player.moving) return
-    let sx = 0, sy = 0; if (Math.abs(dx) > Math.abs(dy)) sx = dx > 0 ? 1 : -1; else sy = dy > 0 ? 1 : -1
-    let c = this.player.col, r = this.player.row
-    while (MAZE[r + sy]?.[c + sx] === '0') { c += sx; r += sy }
-    if (c !== this.player.col || r !== this.player.row) { this.player.tx = c; this.player.ty = r; this.player.moving = true; this.options.onImpact('tap') }
-  }
-  autopilot() { const dirs = [[70, 0], [-70, 0], [0, 70], [0, -70]].sort(() => Math.random() - .5); for (const [x, y] of dirs) { const before = `${this.player.tx},${this.player.ty}`; this.swipe(x, y); if (`${this.player.tx},${this.player.ty}` !== before) break } }
-  tick(dt: number) {
-    this.autoClock += dt; if (this.options.preview && this.autoClock > 1) { this.autoClock = 0; this.autopilot() }
-    const speed = dt * 11; this.player.x += (this.player.tx - this.player.x) * Math.min(1, speed); this.player.y += (this.player.ty - this.player.y) * Math.min(1, speed)
-    if (Math.hypot(this.player.tx - this.player.x, this.player.ty - this.player.y) < .025) {
-      this.player.x = this.player.tx; this.player.y = this.player.ty; this.player.col = this.player.tx; this.player.row = this.player.ty; this.player.moving = false
-      const key = `${this.player.col},${this.player.row}`; if (this.coins.delete(key)) this.addScore(10)
-    }
-    this.monster.phase += dt; this.monster.x = 7.5 + Math.sin(this.monster.phase * 1.25) * 1.1
-    if (Math.hypot(this.player.x - this.monster.x, this.player.y - this.monster.y) < .55) this.finish()
-    if (!this.options.preview && Math.floor(this.elapsed) > this.score / 10) this.setScore(Math.floor(this.elapsed) * 10 + (5 - this.coins.size) * 10)
-  }
-  render(ctx: CanvasRenderingContext2D) {
-    this.paintBackdrop(ctx, '#080519', '#120829')
-    const cell = Math.min(this.w / 10, (this.h - 150) / 15), ox = (this.w - cell * 10) / 2, oy = 74
-    ctx.shadowBlur = 12; ctx.shadowColor = '#5538ff'
-    for (let r = 0; r < MAZE.length; r++) for (let c = 0; c < 10; c++) if (MAZE[r][c] === '1') { ctx.fillStyle = '#24145c'; ctx.fillRect(ox + c * cell + 2, oy + r * cell + 2, cell - 4, cell - 4); ctx.strokeStyle = '#5c42e8'; ctx.strokeRect(ox + c * cell + 3, oy + r * cell + 3, cell - 6, cell - 6) }
-    ctx.shadowBlur = 18; for (const key of this.coins) { const [c, r] = key.split(',').map(Number); ctx.fillStyle = '#ffe45f'; ctx.shadowColor = '#ffe45f'; ctx.beginPath(); ctx.arc(ox + (c + .5) * cell, oy + (r + .5) * cell, 6, 0, Math.PI * 2); ctx.fill() }
-    const px = ox + (this.player.x + .5) * cell, py = oy + (this.player.y + .5) * cell; ctx.fillStyle = '#45ffe0'; ctx.shadowColor = '#45ffe0'; ctx.beginPath(); ctx.arc(px, py, 10, 0, Math.PI * 2); ctx.fill()
-    ctx.fillStyle = '#ff3ca6'; ctx.shadowColor = '#ff3ca6'; ctx.beginPath(); ctx.arc(ox + (this.monster.x + .5) * cell, oy + (this.monster.y + .5) * cell, 11, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0
-    drawGameLabel(ctx, 'SWIPE • SLIDE • SURVIVE', `${this.score} NEON`, this.w, this.h)
-  }
-}
+class NeonEscapeController extends NeonVaultController {}
 
 type StackBlock = { x: number; y: number; width: number; color: string }
 class PerfectStackController extends BaseController {

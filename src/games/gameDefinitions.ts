@@ -37,12 +37,12 @@ const definitions: Definition[] = [
     scoringRules: [{ label: '전진', value: '+1m' }, { label: '체크포인트', value: '보너스' }],
   },
   {
-    id: 'neon-escape', slug: 'neon-escape', title: 'Neon Escape', kicker: 'DON’T STOP', icon: 'NE', category: 'Neon Maze',
-    shortDescription: '첫 번째 벽까지 질주하며 네온 미로를 탈출하세요.',
-    fullDescription: '스와이프한 방향의 첫 번째 벽까지 멈추지 않고 이동합니다. 벽을 경로로 활용해 코인을 모으고 추격자를 피하세요.',
+    id: 'neon-escape', slug: 'neon-escape', title: 'Neon Vault', kicker: 'DON’T STOP', icon: 'NV', category: 'Neon Maze',
+    shortDescription: '벽 직전까지 질주하며 모든 신호를 모아 네온 금고를 탈출하세요.',
+    fullDescription: '스와이프한 방향으로 벽 직전까지 빠르게 이동합니다. 경로의 신호와 코인을 모으고, 가시·레이저·순찰자를 피해 잠긴 출구를 여세요.',
     theme: { background: '#09051b', surface: '#10082e', accent: '#45ffe0', accent2: '#ff3ca6', text: '#f7f4ff', muted: '#9d92c5', headerStyle: 'neon' },
     controls: [{ label: '스와이프', description: '선택 방향의 첫 벽까지 빠르게 이동합니다.' }],
-    scoringRules: [{ label: '코인', value: '+10' }, { label: '생존', value: '초당 점수' }],
+    scoringRules: [{ label: '신호', value: '+1' }, { label: '코인', value: '+10' }, { label: '탈출', value: '보너스' }],
   },
   {
     id: 'perfect-stack', slug: 'perfect-stack', title: 'Perfect Stack', kicker: 'BUILD THE SKY', icon: 'PS', category: 'Precision Stack',

@@ -44,10 +44,18 @@ export function GameCanvas({ game, preview = false, active = true, paused = fals
     const handleDown = (event: PointerEvent) => { if (preview) return; canvas.setPointerCapture(event.pointerId); down = point(event); controller.pointerDown(down.x, down.y) }
     const handleMove = (event: PointerEvent) => { if (preview || !down) return; const p = point(event); controller.pointerMove(p.x, p.y) }
     const handleUp = (event: PointerEvent) => { if (preview || !down) return; const p = point(event); controller.pointerUp(p.x, p.y); down = null }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (preview || event.repeat) return
+      const directions: Record<string, [number, number]> = { ArrowUp: [0, -70], w: [0, -70], W: [0, -70], ArrowDown: [0, 70], s: [0, 70], S: [0, 70], ArrowLeft: [-70, 0], a: [-70, 0], A: [-70, 0], ArrowRight: [70, 0], d: [70, 0], D: [70, 0] }
+      const direction = directions[event.key]
+      if (direction) { event.preventDefault(); controller.swipe?.(...direction) }
+      if (event.key === 'r' || event.key === 'R') controller.restart()
+    }
     canvas.addEventListener('pointerdown', handleDown); canvas.addEventListener('pointermove', handleMove); canvas.addEventListener('pointerup', handleUp); canvas.addEventListener('pointercancel', handleUp)
+    window.addEventListener('keydown', handleKeyDown)
     frame = requestAnimationFrame(loop)
     const visibility = () => document.hidden || pausedRef.current ? controller.pause() : controller.resume(); document.addEventListener('visibilitychange', visibility)
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); document.removeEventListener('visibilitychange', visibility); canvas.removeEventListener('pointerdown', handleDown); canvas.removeEventListener('pointermove', handleMove); canvas.removeEventListener('pointerup', handleUp); canvas.removeEventListener('pointercancel', handleUp); controller.destroy(); controllerRef.current = null }
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); document.removeEventListener('visibilitychange', visibility); window.removeEventListener('keydown', handleKeyDown); canvas.removeEventListener('pointerdown', handleDown); canvas.removeEventListener('pointermove', handleMove); canvas.removeEventListener('pointerup', handleUp); canvas.removeEventListener('pointercancel', handleUp); controller.destroy(); controllerRef.current = null }
   }, [active, game, preview])
 
   useEffect(() => { pausedRef.current = paused; if (!active) return; if (paused) controllerRef.current?.pause(); else controllerRef.current?.resume() }, [active, paused])
