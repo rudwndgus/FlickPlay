@@ -8,7 +8,7 @@ const definitions: Definition[] = [
     id: 'hoop-flight', slug: 'hoop-flight', title: 'Hoop Flight', kicker: 'GRAVITY RUN', icon: 'HF', category: 'Arcade Basketball',
     shortDescription: '탭으로 중력을 뒤집고, 떠오르는 림 사이를 비행하세요.',
     fullDescription: '농구공을 계속 공중에 띄워 높이가 달라지는 골대를 통과하세요. 바닥에 닿는 순간 비행이 끝납니다.',
-    theme: { background: '#47147c', surface: '#160b2f', accent: '#ffcc32', accent2: '#ff6b43', text: '#fff9e8', muted: '#cbb8eb', headerStyle: 'glass' },
+    theme: { background: '#c9baa0', surface: '#282219', accent: '#ef4934', accent2: '#f3c64e', text: '#fffaf0', muted: '#8c7f69', headerStyle: 'dark' },
     controls: [{ label: '탭', description: '공에 위쪽 충격량을 줍니다.' }],
     scoringRules: [{ label: '골', value: '+1' }, { label: '클린샷', value: '연속 성공 시 FIRE MODE' }],
   },
