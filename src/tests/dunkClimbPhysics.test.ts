@@ -47,6 +47,24 @@ describe('Dunk Climb physics', () => {
     expect(Math.hypot(controller.ball.x - controller.launchHoop.x, controller.ball.y - anchorY)).toBeCloseTo(132, 4)
   })
 
+  it('keeps the next hoop within the maximum shot arc', () => {
+    const { controller } = makeController()
+    const gap = controller.launchHoop.y - controller.targetHoop.y
+
+    expect(gap).toBeCloseTo(844 * .27, 4)
+    expect(gap).toBeLessThan(240)
+  })
+
+  it('can reach and score on the lowered target hoop', () => {
+    const { controller } = makeController()
+    controller.targetHoop.x = controller.launchHoop.x
+    controller.autopilot?.(0)
+
+    for (let frame = 0; frame < 180 && controller.getScore() === 0; frame++) controller.update(1 / 120)
+
+    expect(controller.getScore()).toBe(1)
+  })
+
   it('scores a descending shot and starts the climb transition', () => {
     const { controller, onScore } = makeController()
     controller.ball.x = controller.targetHoop.x

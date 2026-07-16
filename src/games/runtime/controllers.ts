@@ -279,7 +279,7 @@ class DunkClimbController extends BaseController {
   reset() {
     const launchY = this.h * .74
     this.launchHoop = { x: this.w * .5, y: launchY, passed: true, pulse: 0, netSwing: 0, netPunch: 0 }
-    this.targetHoop = this.createTarget(launchY - this.h * .43)
+    this.targetHoop = this.createTarget(launchY - this.h * .27)
     this.ball = { x: this.launchHoop.x, y: this.launchHoop.y - 14, vx: 0, vy: 0, r: 19, flying: false, rotation: 0, collisionCooldown: 0 }
     this.dragStart = null; this.dragPoint = null; this.bounces = 0; this.autoClock = 0
     this.transitionDelay = 0; this.climbRemaining = 0; this.cleanStreak = 0; this.trail = []; this.scoreEffect = 0
@@ -287,7 +287,7 @@ class DunkClimbController extends BaseController {
   constructor(theme: GameTheme, options: ControllerOptions) {
     super(theme, options)
     this.hoopImage = new Image()
-    this.hoopImage.src = `${import.meta.env.BASE_URL}games/hoop-flight/hoop.png`
+    this.hoopImage.src = `${import.meta.env.BASE_URL}games/dunk-climb/hoop.png`
     this.reset()
   }
   pointerDown(x: number, y: number) {
@@ -321,7 +321,7 @@ class DunkClimbController extends BaseController {
   autopilot() {
     if (this.ball.flying || this.transitionDelay > 0 || this.climbRemaining > 0) return
     const anchor = { x: this.launchHoop.x, y: this.launchHoop.y - 14 }
-    const pullX = clamp((anchor.x - this.targetHoop.x) / 5.8, -48, 48)
+    const pullX = clamp((anchor.x - this.targetHoop.x) / 7.6, -48, 48)
     this.pointerDown(anchor.x, anchor.y); this.pointerMove(anchor.x + pullX, anchor.y + 123); this.pointerUp(anchor.x + pullX, anchor.y + 123)
   }
   tick(dt: number) {
@@ -339,7 +339,7 @@ class DunkClimbController extends BaseController {
       this.ball.x += (this.targetHoop.x - this.ball.x) * Math.min(1, dt * 13)
       this.ball.y += (this.targetHoop.y + 27 - this.ball.y) * Math.min(1, dt * 10)
       this.ball.rotation += dt * 4
-      if (this.transitionDelay <= 0) this.climbRemaining = this.h * .43
+      if (this.transitionDelay <= 0) this.climbRemaining = this.h * .27
       return
     }
     if (this.climbRemaining > 0) {
@@ -360,6 +360,7 @@ class DunkClimbController extends BaseController {
     const insideOpening = Math.abs(this.ball.x - this.targetHoop.x) < this.hoopWidth() * .36
     if (!this.targetHoop.passed && lastY <= this.targetHoop.y && this.ball.y > this.targetHoop.y && this.ball.vy > 0 && insideOpening) {
       this.targetHoop.passed = true; this.targetHoop.pulse = 1; this.targetHoop.netPunch = 1
+      this.targetHoop.netSwing = clamp((this.ball.x - this.targetHoop.x) * .7, -18, 18)
       const clean = Math.abs(this.ball.x - this.targetHoop.x) < this.hoopWidth() * .18 && this.bounces === 0
       this.cleanStreak = clean ? this.cleanStreak + 1 : 0
       this.setScore(this.score + 1); this.options.onImpact(clean ? 'perfect' : 'score')
@@ -384,14 +385,14 @@ class DunkClimbController extends BaseController {
   private createTarget(y: number): Hoop { return { x: random(76, this.w - 76), y, passed: false, pulse: 0, netSwing: 0, netPunch: 0 } }
   private completeClimb() {
     this.launchHoop = { ...this.targetHoop, passed: true, pulse: 0, netPunch: 0 }
-    this.targetHoop = this.createTarget(this.launchHoop.y - this.h * .43)
+    this.targetHoop = this.createTarget(this.launchHoop.y - this.h * .27)
     this.ball = { x: this.launchHoop.x, y: this.launchHoop.y - 14, vx: 0, vy: 0, r: 19, flying: false, rotation: this.ball.rotation, collisionCooldown: 0 }
     this.bounces = 0; this.trail = []; this.climbRemaining = 0
   }
-  private hoopWidth() { return Math.min(105, this.w * .27) }
+  private hoopWidth() { return Math.min(112, this.w * .29) }
   private collideWithRims(hoop: Hoop) {
     if (this.ball.collisionCooldown > 0) return
-    const rimHalf = this.hoopWidth() * .43
+    const rimHalf = this.hoopWidth() * .34
     for (const postX of [hoop.x - rimHalf, hoop.x + rimHalf]) {
       const dx = this.ball.x - postX, dy = this.ball.y - hoop.y, length = Math.hypot(dx, dy), minDistance = this.ball.r + 5
       if (length === 0 || length >= minDistance) continue
@@ -414,28 +415,22 @@ class DunkClimbController extends BaseController {
   }
   private drawHoopLayer(ctx: CanvasRenderingContext2D, hoop: Hoop, foreground: boolean) {
     if (!this.hoopImage.complete || !this.hoopImage.naturalWidth) return
-    const width = this.hoopWidth(), height = width * (483 / 560), left = hoop.x - width * .5, top = hoop.y - height * .135
-    ctx.save()
-    if (hoop === this.launchHoop && this.dragStart && this.dragPoint && foreground) {
-      const rimSourceY = this.hoopImage.naturalHeight * .105, netSourceY = this.hoopImage.naturalHeight * .22
-      ctx.drawImage(this.hoopImage, 0, rimSourceY, this.hoopImage.naturalWidth, netSourceY - rimSourceY, left, top + height * .105, width, height * .115)
-      const pullX = this.dragPoint.x - hoop.x, pullY = this.dragPoint.y - hoop.y
-      const angle = Math.atan2(pullY, pullX) - Math.PI * .5, stretch = clamp(Math.hypot(pullX, pullY) / 48, 1, 2.45)
-      ctx.translate(hoop.x, hoop.y); ctx.rotate(angle); ctx.scale(.92, stretch); ctx.translate(-hoop.x, -hoop.y)
-      ctx.drawImage(this.hoopImage, 0, netSourceY, this.hoopImage.naturalWidth, this.hoopImage.naturalHeight - netSourceY, left, top + height * .22, width, height * .78)
-      ctx.restore(); return
+    const size = this.hoopWidth(), left = hoop.x - size * .5, top = hoop.y - size * .33
+    let angle = (hoop.netSwing ?? 0) * .012
+    let stretch = 1 + Math.sin((hoop.netPunch ?? 0) * Math.PI) * (hoop.netPunch ?? 0) * .12
+    if (hoop === this.launchHoop && this.dragStart && this.dragPoint) {
+      const pullX = this.dragPoint.x - this.dragStart.x, pullY = this.dragPoint.y - this.dragStart.y
+      angle = clamp(pullX / 132, -1, 1) * .34
+      stretch = 1 + clamp(pullY / 132, 0, 1) * .28
     }
+    ctx.save()
     if (hoop.pulse > 0) { ctx.shadowColor = '#ffb52e'; ctx.shadowBlur = 30 * hoop.pulse }
+    ctx.translate(hoop.x, hoop.y); ctx.rotate(angle); ctx.scale(1, stretch); ctx.translate(-hoop.x, -hoop.y)
     if (!foreground) {
-      const sourceHeight = this.hoopImage.naturalHeight * .24
-      ctx.drawImage(this.hoopImage, 0, 0, this.hoopImage.naturalWidth, sourceHeight, left, top, width, height * .24)
+      ctx.drawImage(this.hoopImage, left, top, size, size)
     } else {
-      const rimSourceY = this.hoopImage.naturalHeight * .105, netSourceY = this.hoopImage.naturalHeight * .22
-      ctx.drawImage(this.hoopImage, 0, rimSourceY, this.hoopImage.naturalWidth, netSourceY - rimSourceY, left, top + height * .105, width, height * .115)
-      ctx.translate(hoop.x, hoop.y)
-      const punch = hoop.netPunch ?? 0, stretch = 1 + Math.sin((1 - punch) * Math.PI * 3) * punch * .28
-      ctx.transform(1, 0, (hoop.netSwing ?? 0) / Math.max(1, height), stretch, 0, 0); ctx.translate(-hoop.x, -hoop.y)
-      ctx.drawImage(this.hoopImage, 0, netSourceY, this.hoopImage.naturalWidth, this.hoopImage.naturalHeight - netSourceY, left, top + height * .22, width, height * .78)
+      const sourceY = this.hoopImage.naturalHeight * .27
+      ctx.drawImage(this.hoopImage, 0, sourceY, this.hoopImage.naturalWidth, this.hoopImage.naturalHeight - sourceY, left, top + size * .27, size, size * .73)
     }
     ctx.restore()
   }
