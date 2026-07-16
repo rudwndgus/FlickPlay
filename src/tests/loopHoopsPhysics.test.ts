@@ -86,6 +86,28 @@ describe('Loop Hoops physics', () => {
     expect(onScore).toHaveBeenCalledWith(1)
   })
 
+  it('drains the refilled timer progressively faster as the score rises', () => {
+    const { controller: fresh } = makeController()
+    fresh.ball.x = 195; fresh.ball.y = 620; fresh.ball.vx = 0; fresh.ball.vy = 0
+    fresh.update(.03)
+    const earlyDrain = 1 - fresh.timeLeft
+
+    const { controller } = makeController()
+    for (let shot = 0; shot < 6; shot++) {
+      controller.rimHits = 0; controller.touchedSurface = true
+      controller.ball.x = controller.target.x; controller.ball.y = controller.target.y - 8
+      controller.ball.vx = 0; controller.ball.vy = 500
+      controller.update(.03)
+    }
+    expect(controller.timeLeft).toBe(1)
+    controller.ball.x = 195; controller.ball.y = 620; controller.ball.vx = 0; controller.ball.vy = 0
+    controller.update(.03)
+    const lateDrain = 1 - controller.timeLeft
+
+    expect(controller.getScore()).toBe(6)
+    expect(lateDrain).toBeGreaterThan(earlyDrain * 1.55)
+  })
+
   it('enters fire mode after three consecutive clean shots', () => {
     const { controller } = makeController()
     for (let shot = 0; shot < 3; shot++) {

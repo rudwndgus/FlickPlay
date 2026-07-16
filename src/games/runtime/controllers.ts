@@ -552,7 +552,7 @@ class LoopHoopsController extends BaseController {
   autopilot() { if (this.ball.y > this.target.y + 24 || this.ball.vy > 230) this.pointerDown() }
   tick(dt: number) {
     if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .38) { this.autoClock = 0; this.autopilot() } }
-    const drainRate = Math.min(.24, .078 + this.elapsed * .0017 + this.score * .004)
+    const drainRate = Math.min(.32, .078 + this.elapsed * .0017 + this.score * .009)
     this.timeLeft = Math.max(0, this.timeLeft - drainRate * dt)
     if (this.timeLeft <= 0) { this.finish(); return }
 
