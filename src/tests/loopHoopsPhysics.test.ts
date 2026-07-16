@@ -9,6 +9,7 @@ type LoopController = GameController & {
   cleanStreak: number
   rimHits: number
   touchedSurface: boolean
+  scoreEffect: { x: number; y: number; life: number; label: string; points: number; clean: boolean; streak: number }
 }
 
 const makeController = () => {
@@ -75,7 +76,7 @@ describe('Loop Hoops physics', () => {
 
   it('refills time and moves the hoop to the opposite side after scoring', () => {
     const { controller, onScore } = makeController()
-    const previousSide = controller.target.side
+    const previousSide = controller.target.side, scoredAt = { x: controller.target.x, y: controller.target.y }
     controller.timeLeft = .2
     controller.ball.x = controller.target.x; controller.ball.y = controller.target.y - 8; controller.ball.vx = 0; controller.ball.vy = 500
     controller.update(.03)
@@ -84,6 +85,21 @@ describe('Loop Hoops physics', () => {
     expect(controller.timeLeft).toBe(1)
     expect(controller.getScore()).toBe(1)
     expect(onScore).toHaveBeenCalledWith(1)
+    expect(controller.scoreEffect).toMatchObject({ x: scoredAt.x, y: scoredAt.y, life: 1, clean: true, label: 'CLEAN!  +1' })
+  })
+
+  it('rejects a crossing through the backboard-to-rim gap', () => {
+    const { controller, onScore } = makeController()
+    const previousSide = controller.target.side
+    controller.ball.x = controller.target.x - 24
+    controller.ball.y = controller.target.y - 8
+    controller.ball.vx = 0; controller.ball.vy = 500; controller.ball.collisionCooldown = 1
+
+    controller.update(.03)
+
+    expect(controller.getScore()).toBe(0)
+    expect(controller.target.side).toBe(previousSide)
+    expect(onScore).not.toHaveBeenCalled()
   })
 
   it('drains the refilled timer progressively faster as the score rises', () => {

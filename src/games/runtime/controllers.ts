@@ -3,6 +3,8 @@ import type { ControllerOptions, GameController, GameStatus, GameTheme } from '.
 type Point = { x: number; y: number }
 const FIRE_STREAK = 3
 const MAX_CLEAN_COMBO = 5
+const LOOP_RIM_HALF = 36
+const LOOP_RIM_TUBE_RADIUS = 4
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
@@ -57,6 +59,7 @@ abstract class BaseController implements GameController {
 
 type Hoop = { x: number; y: number; passed: boolean; pulse: number; netSwing?: number; netVelocity?: number; netPunch?: number; rimTouched?: boolean }
 type HoopScoreEffect = { x: number; y: number; life: number; label: string; clean: boolean; streak: number }
+type LoopScoreEffect = { x: number; y: number; life: number; label: string; points: number; clean: boolean; streak: number }
 
 class HoopFlightController extends BaseController {
   private ball = { x: 110, y: 400, vx: 0, vy: 0, r: 20, rotation: 0, kick: 0, collisionCooldown: 0 }
@@ -532,7 +535,7 @@ class LoopHoopsController extends BaseController {
   private touchedSurface = false
   private autoClock = 0
   private trail: Array<Point & { life: number }> = []
-  private scoreEffect = { life: 0, label: '', points: 0 }
+  private scoreEffect: LoopScoreEffect = { x: 0, y: 0, life: 0, label: '', points: 0, clean: false, streak: 0 }
   private readonly hoopImage: HTMLImageElement
 
   resize(width: number, height: number) {
@@ -542,7 +545,7 @@ class LoopHoopsController extends BaseController {
   reset() {
     this.ball = { x: this.w * .62, y: this.h * .63, vx: -175, vy: -80, r: 18, rotation: 0, kick: 0, collisionCooldown: 0 }
     this.target = { side: -1, x: this.sideHoopAnchorX(-1), y: this.h * .4, pulse: 0, netPunch: 0 }
-    this.timeLeft = 1; this.cleanStreak = 0; this.rimHits = 0; this.touchedSurface = false; this.autoClock = 0; this.trail = []; this.scoreEffect = { life: 0, label: '', points: 0 }
+    this.timeLeft = 1; this.cleanStreak = 0; this.rimHits = 0; this.touchedSurface = false; this.autoClock = 0; this.trail = []; this.scoreEffect = { x: 0, y: 0, life: 0, label: '', points: 0, clean: false, streak: 0 }
   }
   constructor(theme: GameTheme, options: ControllerOptions) {
     super(theme, options)
@@ -587,9 +590,7 @@ class LoopHoopsController extends BaseController {
     this.collideWithRimUnderside(previous)
     this.collideWithBackboard(previous)
     this.collideWithRim(previous)
-    const rimHalf = 36
-    const insideOpening = Math.abs(this.ball.x - this.target.x) < rimHalf - this.ball.r * .35
-    if (previous.y <= this.target.y && this.ball.y > this.target.y && this.ball.vy > 0 && insideOpening) this.scoreGoal()
+    if (this.crossedInsideRim(previous)) this.scoreGoal()
     this.wrapAcrossSideEdges()
   }
   render(ctx: CanvasRenderingContext2D) {
@@ -607,11 +608,12 @@ class LoopHoopsController extends BaseController {
     ctx.fillStyle = 'rgba(255,255,255,.62)'; ctx.font = '800 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('TAP TO BOUNCE  •  BEAT THE CLOCK', this.w * .5, this.h - 38)
   }
   private scoreGoal() {
+    const scoredAt = { x: this.target.x, y: this.target.y }
     const clean = this.rimHits === 0 && !this.touchedSurface
     this.cleanStreak = clean ? this.cleanStreak + 1 : 0
     const points = clean ? Math.min(MAX_CLEAN_COMBO, this.cleanStreak) : 1
     this.setScore(this.score + points); this.options.onImpact(clean ? 'perfect' : 'score')
-    this.scoreEffect = { life: 1, label: clean ? (this.cleanStreak >= FIRE_STREAK ? `FIRE ×${this.cleanStreak}  +${points}` : this.cleanStreak === 2 ? 'PERFECT ×2  +2' : 'CLEAN!  +1') : 'SCORE!  +1', points }
+    this.scoreEffect = { ...scoredAt, life: 1, label: clean ? (this.cleanStreak >= FIRE_STREAK ? `FIRE ×${this.cleanStreak}  +${points}` : this.cleanStreak === 2 ? 'PERFECT ×2  +2' : 'CLEAN!  +1') : 'SCORE!  +1', points, clean, streak: this.cleanStreak }
     this.timeLeft = 1
     this.target.side = this.target.side === -1 ? 1 : -1
     this.target.x = this.sideHoopAnchorX(this.target.side)
@@ -619,6 +621,15 @@ class LoopHoopsController extends BaseController {
     this.target.pulse = 1; this.target.netPunch = 1
     this.ball.vx = this.target.side * Math.min(245, 178 + this.score * 2.5)
     this.rimHits = 0; this.touchedSurface = false
+  }
+  private crossedInsideRim(previous: Point) {
+    if (this.ball.vy <= 0 || previous.y > this.target.y || this.ball.y <= this.target.y) return false
+    const travelY = this.ball.y - previous.y
+    if (travelY <= 0) return false
+    const crossingTime = clamp((this.target.y - previous.y) / travelY, 0, 1)
+    const crossingX = previous.x + (this.ball.x - previous.x) * crossingTime
+    const openingHalf = LOOP_RIM_HALF - this.ball.r - LOOP_RIM_TUBE_RADIUS
+    return openingHalf > 0 && Math.abs(crossingX - this.target.x) <= openingHalf
   }
   private collideWithBackboard(previous: Point) {
     if (this.ball.collisionCooldown > 0) return
@@ -658,7 +669,7 @@ class LoopHoopsController extends BaseController {
   }
   private collideWithRimUnderside(previous: Point) {
     if (this.ball.collisionCooldown > 0 || this.ball.vy >= 0) return
-    const rimHalf = 36, undersideY = this.target.y + 6
+    const rimHalf = LOOP_RIM_HALF, undersideY = this.target.y + 6
     const crossedUnderside = previous.y - this.ball.r >= undersideY && this.ball.y - this.ball.r < undersideY
     const beneathRim = Math.abs(this.ball.x - this.target.x) <= rimHalf + this.ball.r * .35
     if (!crossedUnderside || !beneathRim) return
@@ -670,9 +681,9 @@ class LoopHoopsController extends BaseController {
   }
   private collideWithRim(previous: Point) {
     if (this.ball.collisionCooldown > 0) return
-    const rimHalf = 36
+    const rimHalf = LOOP_RIM_HALF
     for (const x of [this.target.x - rimHalf, this.target.x + rimHalf]) {
-      const radius = this.ball.r + 4
+      const radius = this.ball.r + LOOP_RIM_TUBE_RADIUS
       const moveX = this.ball.x - previous.x, moveY = this.ball.y - previous.y
       const fromX = previous.x - x, fromY = previous.y - this.target.y
       const a = moveX * moveX + moveY * moveY
@@ -738,8 +749,19 @@ class LoopHoopsController extends BaseController {
   }
   private drawScoreEffect(ctx: CanvasRenderingContext2D) {
     if (this.scoreEffect.life <= 0) return
-    const alpha = Math.min(1, this.scoreEffect.life * 2), rise = (1 - this.scoreEffect.life) * 34
-    ctx.save(); ctx.globalAlpha = alpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.shadowColor = this.cleanStreak >= FIRE_STREAK ? '#ff641f' : '#24160f'; ctx.shadowBlur = this.cleanStreak >= FIRE_STREAK ? 22 : 10
+    const progress = 1 - this.scoreEffect.life, alpha = Math.min(1, this.scoreEffect.life * 2), rise = progress * 34
+    const burstColor = this.scoreEffect.streak >= FIRE_STREAK ? '#ff5a20' : this.scoreEffect.clean ? '#ffe85c' : '#ff4f9c'
+    ctx.save(); ctx.translate(this.scoreEffect.x, this.scoreEffect.y); ctx.globalAlpha = alpha; ctx.strokeStyle = burstColor; ctx.fillStyle = burstColor; ctx.shadowColor = burstColor; ctx.shadowBlur = this.scoreEffect.clean ? 24 : 14
+    ctx.lineWidth = Math.max(2, 7 - progress * 5); ctx.beginPath(); ctx.arc(0, 0, 22 + progress * 68, 0, Math.PI * 2); ctx.stroke()
+    const sparkCount = this.scoreEffect.clean ? 14 : 8
+    for (let i = 0; i < sparkCount; i++) {
+      const angle = i * Math.PI * 2 / sparkCount + this.scoreEffect.streak * .19
+      const inner = 24 + progress * 20, outer = inner + 15 + progress * (26 + i % 3 * 5)
+      ctx.lineWidth = 3 + i % 2; ctx.beginPath(); ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner * .62); ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer * .62); ctx.stroke()
+      ctx.beginPath(); ctx.arc(Math.cos(angle) * outer, Math.sin(angle) * outer * .62, 2.5 + i % 3, 0, Math.PI * 2); ctx.fill()
+    }
+    ctx.restore()
+    ctx.save(); ctx.globalAlpha = alpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.shadowColor = burstColor; ctx.shadowBlur = this.scoreEffect.clean ? 24 : 10
     ctx.font = '900 76px system-ui'; ctx.fillText(String(this.score), this.w * .5, this.h * .46 - rise)
     ctx.font = '900 24px system-ui'; ctx.fillText(this.scoreEffect.label, this.w * .5, this.h * .46 + 56 - rise)
     ctx.restore()
