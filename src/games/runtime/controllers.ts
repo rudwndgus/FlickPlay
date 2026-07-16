@@ -284,6 +284,7 @@ class DunkClimbController extends BaseController {
   private scoreLabel = 'SWISH  +1'
   private lastShotPoints = 1
   private rescueEffect = 0
+  private launchRimArmed = false
   private readonly hoopImage: HTMLImageElement
   private readonly gravity = 900
   private readonly shotPower = 7.3
@@ -294,7 +295,7 @@ class DunkClimbController extends BaseController {
     this.targetHoop = this.createTarget(launchY - this.h * .27)
     this.ball = { x: this.launchHoop.x, y: this.launchHoop.y - 14, vx: 0, vy: 0, r: 19, flying: false, rotation: 0, collisionCooldown: 0 }
     this.dragStart = null; this.dragPoint = null; this.wallBounces = 0; this.rimHits = 0; this.autoClock = 0
-    this.transitionDelay = 0; this.rescueDelay = 0; this.climbRemaining = 0; this.cleanStreak = 0; this.trail = []; this.scoreEffect = 0; this.scoreLabel = 'SWISH  +1'; this.lastShotPoints = 1; this.rescueEffect = 0
+    this.transitionDelay = 0; this.rescueDelay = 0; this.climbRemaining = 0; this.cleanStreak = 0; this.trail = []; this.scoreEffect = 0; this.scoreLabel = 'SWISH  +1'; this.lastShotPoints = 1; this.rescueEffect = 0; this.launchRimArmed = false
   }
   constructor(theme: GameTheme, options: ControllerOptions) {
     super(theme, options)
@@ -326,7 +327,7 @@ class DunkClimbController extends BaseController {
       return
     }
     this.ball.vx = dx * this.shotPower; this.ball.vy = dy * this.shotPower
-    this.ball.flying = true; this.ball.collisionCooldown = .08
+    this.ball.flying = true; this.ball.collisionCooldown = .08; this.launchRimArmed = false
     this.wallBounces = 0; this.rimHits = 0
     this.launchHoop.netPunch = 1; this.launchHoop.netSwing = clamp(-dx * .38, -28, 28)
     this.dragStart = null; this.dragPoint = null; this.trail = []; this.options.onImpact('tap')
@@ -355,7 +356,7 @@ class DunkClimbController extends BaseController {
       this.ball.rotation += dt * 3
       if (this.rescueDelay <= 0) {
         this.ball.x = this.launchHoop.x; this.ball.y = this.launchHoop.y - 14
-        this.ball.vx = 0; this.ball.vy = 0; this.ball.flying = false; this.wallBounces = 0; this.rimHits = 0; this.trail = []
+        this.ball.vx = 0; this.ball.vy = 0; this.ball.flying = false; this.wallBounces = 0; this.rimHits = 0; this.trail = []; this.launchRimArmed = false
       }
       return
     }
@@ -382,7 +383,10 @@ class DunkClimbController extends BaseController {
       this.ball.x = clamp(this.ball.x, this.ball.r, this.w - this.ball.r); this.ball.vx *= -.76; this.wallBounces++; this.options.onImpact('tap')
     }
     const launchRim = this.getRimGeometry(this.launchHoop), targetRim = this.getRimGeometry(this.targetHoop)
-    this.collideWithRims(this.launchHoop, launchRim); this.collideWithRims(this.targetHoop, targetRim)
+    const launchClearance = this.signedRimDistance(this.ball, launchRim)
+    if (!this.launchRimArmed && (launchClearance < -(this.ball.r + launchRim.tubeRadius + 2) || (this.ball.vy > 0 && launchClearance < 0))) this.launchRimArmed = true
+    if (this.launchRimArmed && this.ball.vy > 0) this.collideWithRims(this.launchHoop, launchRim)
+    this.collideWithRims(this.targetHoop, targetRim)
     const insideOpening = this.isInsideRimOpening(this.ball, targetRim)
     if (!this.targetHoop.passed && this.crossedRimPlane(lastPoint, this.ball, targetRim) && this.ball.vy > 0 && insideOpening) {
       this.targetHoop.passed = true; this.targetHoop.pulse = 1; this.targetHoop.netPunch = 1
@@ -399,7 +403,7 @@ class DunkClimbController extends BaseController {
       this.setScore(this.score + points); this.options.onImpact(points > 1 ? 'perfect' : 'score')
       this.scoreEffect = 1; this.transitionDelay = .34; this.ball.flying = false
     }
-    const returnedToLaunch = !this.targetHoop.passed && this.crossedRimPlane(lastPoint, this.ball, launchRim) && this.ball.vy > 0 && this.isInsideRimOpening(this.ball, launchRim)
+    const returnedToLaunch = this.launchRimArmed && !this.targetHoop.passed && this.crossedRimPlane(lastPoint, this.ball, launchRim) && this.ball.vy > 0 && this.isInsideRimOpening(this.ball, launchRim)
     if (returnedToLaunch) {
       this.launchHoop.netPunch = 1; this.launchHoop.netSwing = clamp((this.ball.x - this.launchHoop.x) * .7, -18, 18)
       this.ball.flying = false; this.rescueDelay = .38; this.rescueEffect = 1; this.options.onImpact('perfect')
@@ -426,7 +430,7 @@ class DunkClimbController extends BaseController {
     this.launchHoop = { ...this.targetHoop, passed: true, pulse: 0, netPunch: 0 }
     this.targetHoop = this.createTarget(this.launchHoop.y - this.h * .27)
     this.ball = { x: this.launchHoop.x, y: this.launchHoop.y - 14, vx: 0, vy: 0, r: 19, flying: false, rotation: this.ball.rotation, collisionCooldown: 0 }
-    this.wallBounces = 0; this.rimHits = 0; this.trail = []; this.climbRemaining = 0
+    this.wallBounces = 0; this.rimHits = 0; this.trail = []; this.climbRemaining = 0; this.launchRimArmed = false
   }
   private hoopWidth() { return Math.min(112, this.w * .29) }
   private getHoopPose(hoop: Hoop) {
@@ -453,9 +457,11 @@ class DunkClimbController extends BaseController {
     return first.x <= second.x ? { left: first, right: second, tubeRadius: size * .027 } : { left: second, right: first, tubeRadius: size * .027 }
   }
   private crossedRimPlane(previous: Point, current: Point, rim: ReturnType<DunkClimbController['getRimGeometry']>) {
-    const dx = rim.right.x - rim.left.x, dy = rim.right.y - rim.left.y
-    const side = (point: Point) => dx * (point.y - rim.left.y) - dy * (point.x - rim.left.x)
-    return side(previous) <= 0 && side(current) > 0
+    return this.signedRimDistance(previous, rim) <= 0 && this.signedRimDistance(current, rim) > 0
+  }
+  private signedRimDistance(point: Point, rim: ReturnType<DunkClimbController['getRimGeometry']>) {
+    const dx = rim.right.x - rim.left.x, dy = rim.right.y - rim.left.y, length = Math.max(.001, Math.hypot(dx, dy))
+    return (dx * (point.y - rim.left.y) - dy * (point.x - rim.left.x)) / length
   }
   private isInsideRimOpening(point: Point, rim: ReturnType<DunkClimbController['getRimGeometry']>) {
     const dx = rim.right.x - rim.left.x, dy = rim.right.y - rim.left.y, length = Math.hypot(dx, dy)

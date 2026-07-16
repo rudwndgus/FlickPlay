@@ -4,7 +4,7 @@ import type { GameController } from '../games/types'
 
 type DunkController = GameController & {
   ball: { x: number; y: number; vx: number; vy: number; r: number; flying: boolean; collisionCooldown: number }
-  launchHoop: { x: number; y: number; netPunch?: number }
+  launchHoop: { x: number; y: number; passed: boolean; netPunch?: number }
   targetHoop: { x: number; y: number; passed: boolean; netPunch?: number }
   dragStart: { x: number; y: number } | null
   dragPoint: { x: number; y: number } | null
@@ -16,6 +16,7 @@ type DunkController = GameController & {
   cleanStreak: number
   scoreLabel: string
   lastShotPoints: number
+  launchRimArmed: boolean
   getRimGeometry: (hoop: DunkController['targetHoop']) => { left: { x: number; y: number }; right: { x: number; y: number }; tubeRadius: number }
   collideWithRims: (hoop: DunkController['targetHoop']) => void
 }
@@ -44,6 +45,32 @@ describe('Dunk Climb physics', () => {
     expect(controller.ball.vx).toBeLessThan(0)
     expect(controller.ball.vy).toBeLessThan(0)
     expect(controller.launchHoop.netPunch).toBe(1)
+    expect(controller.launchRimArmed).toBe(false)
+  })
+
+  it('ignores the launch rim while the fired ball is exiting upward', () => {
+    const { controller } = makeController()
+    const rim = controller.getRimGeometry(controller.launchHoop)
+    controller.launchRimArmed = false
+    controller.ball.x = rim.left.x; controller.ball.y = rim.left.y + controller.ball.r + 1
+    controller.ball.vx = 0; controller.ball.vy = -300; controller.ball.flying = true; controller.ball.collisionCooldown = 0
+
+    controller.update(.01)
+
+    expect(controller.ball.vy).toBeLessThan(0)
+    expect(controller.launchRimArmed).toBe(false)
+  })
+
+  it('restores launch-rim collisions when the ball falls back down', () => {
+    const { controller } = makeController()
+    const rim = controller.getRimGeometry(controller.launchHoop)
+    controller.launchRimArmed = true
+    controller.ball.x = rim.left.x; controller.ball.y = rim.left.y - controller.ball.r - 1
+    controller.ball.vx = 0; controller.ball.vy = 300; controller.ball.flying = true; controller.ball.collisionCooldown = 0
+
+    controller.update(.01)
+
+    expect(controller.ball.vy).toBeLessThan(0)
   })
 
   it('limits the elastic pull distance', () => {
@@ -153,6 +180,7 @@ describe('Dunk Climb physics', () => {
 
   it('saves a missed shot that falls back through the launch hoop', () => {
     const { controller, onScore, onFinish } = makeController()
+    controller.launchRimArmed = true
     controller.ball.x = controller.launchHoop.x
     controller.ball.y = controller.launchHoop.y - 8
     controller.ball.vx = 0; controller.ball.vy = 480; controller.ball.flying = true
