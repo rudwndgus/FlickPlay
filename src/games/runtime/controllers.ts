@@ -526,9 +526,13 @@ class LoopHoopsController extends BaseController {
   private scoreEffect = { life: 0, label: '', points: 0 }
   private readonly hoopImage: HTMLImageElement
 
+  resize(width: number, height: number) {
+    super.resize(width, height)
+    this.target.x = this.sideHoopAnchorX(this.target.side)
+  }
   reset() {
     this.ball = { x: this.w * .62, y: this.h * .63, vx: -175, vy: -80, r: 18, rotation: 0, kick: 0, collisionCooldown: 0 }
-    this.target = { side: -1, x: 82, y: this.h * .4, pulse: 0, netPunch: 0 }
+    this.target = { side: -1, x: this.sideHoopAnchorX(-1), y: this.h * .4, pulse: 0, netPunch: 0 }
     this.timeLeft = 1; this.cleanStreak = 0; this.rimHits = 0; this.touchedSurface = false; this.autoClock = 0; this.trail = []; this.scoreEffect = { life: 0, label: '', points: 0 }
   }
   constructor(theme: GameTheme, options: ControllerOptions) {
@@ -601,7 +605,7 @@ class LoopHoopsController extends BaseController {
     this.scoreEffect = { life: 1, label: clean ? (this.cleanStreak >= 3 ? `PERFECT ×${this.cleanStreak}` : this.cleanStreak === 2 ? 'PERFECT ×2' : 'CLEAN!') : 'SCORE!', points }
     this.timeLeft = 1
     this.target.side = this.target.side === -1 ? 1 : -1
-    this.target.x = this.target.side === -1 ? 82 : this.w - 82
+    this.target.x = this.sideHoopAnchorX(this.target.side)
     this.target.y = random(this.h * .27, this.h * .55)
     this.target.pulse = 1; this.target.netPunch = 1
     this.ball.vx = this.target.side * Math.min(245, 178 + this.score * 2.5)
@@ -609,7 +613,7 @@ class LoopHoopsController extends BaseController {
   }
   private collideWithBackboard(previous: Point) {
     if (this.ball.collisionCooldown > 0) return
-    const size = Math.min(190, this.w * .49)
+    const size = this.sideHoopSize()
     const centerX = this.target.x + this.target.side * size * .29
     const halfWidth = size * .025, top = this.target.y - size * .48, bottom = this.target.y + size * .25
     const closestX = clamp(this.ball.x, centerX - halfWidth, centerX + halfWidth)
@@ -637,6 +641,11 @@ class LoopHoopsController extends BaseController {
     const wrapSpan = this.w + this.ball.r * 2
     if (this.ball.x + this.ball.r < 0) this.ball.x += wrapSpan
     else if (this.ball.x - this.ball.r > this.w) this.ball.x -= wrapSpan
+  }
+  private sideHoopSize() { return Math.min(190, this.w * .49) }
+  private sideHoopAnchorX(side: -1 | 1) {
+    const size = this.sideHoopSize(), inset = size * (.29 + .025)
+    return side === -1 ? inset : this.w - inset
   }
   private collideWithRimUnderside(previous: Point) {
     if (this.ball.collisionCooldown > 0 || this.ball.vy >= 0) return
@@ -698,7 +707,7 @@ class LoopHoopsController extends BaseController {
   }
   private drawSideHoopImage(ctx: CanvasRenderingContext2D, foreground: boolean) {
     if (!this.hoopImage.complete || !this.hoopImage.naturalWidth) return
-    const size = Math.min(190, this.w * .49), sourceY = this.hoopImage.naturalHeight * .57
+    const size = this.sideHoopSize(), sourceY = this.hoopImage.naturalHeight * .57
     ctx.save(); ctx.translate(this.target.x, this.target.y); if (this.target.side === 1) ctx.scale(-1, 1)
     if (this.target.pulse > 0) { ctx.shadowColor = '#ff1996'; ctx.shadowBlur = 32 * this.target.pulse }
     if (!foreground) ctx.drawImage(this.hoopImage, -size * .586, -size * .586, size, size)

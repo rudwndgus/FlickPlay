@@ -102,7 +102,9 @@ describe('Loop Hoops physics', () => {
     const { controller } = makeController()
     const size = Math.min(190, 390 * .49)
     const boardCenter = controller.target.x + controller.target.side * size * .29
+    const outerEdge = boardCenter + controller.target.side * size * .025
     const innerFace = boardCenter - controller.target.side * size * .025
+    expect(outerEdge).toBeCloseTo(0)
     controller.ball.x = innerFace + controller.ball.r + 4
     controller.ball.y = controller.target.y - 55
     controller.ball.vx = -320; controller.ball.vy = 0; controller.ball.collisionCooldown = 0
