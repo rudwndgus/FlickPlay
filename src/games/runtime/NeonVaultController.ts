@@ -26,7 +26,7 @@ export class NeonVaultController implements GameController {
   private toast = 'COLLECT EVERY SIGNAL'; private toastLife = 2.4; private collectedCoins = 0
   private trail: (Point & { life: number })[] = []; private particles: Particle[] = []
 
-  constructor(private readonly theme: GameTheme, private readonly options: ControllerOptions) { this.reset() }
+  constructor(_theme: GameTheme, private readonly options: ControllerOptions) { this.reset() }
   resize(width: number, height: number) { this.w = width; this.h = height }
   pause() { this.paused = true; this.status = this.status === 'finished' ? 'finished' : 'paused' }
   resume() { this.paused = false; if (this.status === 'paused') this.status = 'playing' }
@@ -77,7 +77,7 @@ export class NeonVaultController implements GameController {
   }
   private visit(node: Node) {
     const key = `${node.x},${node.y}`
-    if (this.dots.delete(key)) { this.addScore(1); this.burst(node.x, node.y, '#54ffe0', 5) }
+    if (this.dots.delete(key)) { this.addScore(1); this.burst(node.x, node.y, '#f5ff35', 5) }
     if (this.coins.delete(key)) { this.collectedCoins++; this.addScore(10); this.burst(node.x, node.y, '#ffe45f', 12); this.toast = 'VAULT COIN +10'; this.toastLife = 1 }
     if (key === '3,5' && !this.player.shield) { this.player.shield = true; this.burst(node.x, node.y, '#6abfff', 12); this.toast = 'SHIELD READY'; this.toastLife = 1.2 }
     const spike = SPIKES.find((s) => s.x === node.x && s.y === node.y); if (spike && this.spikeActive(spike)) this.danger(node.x, node.y)
@@ -108,22 +108,39 @@ export class NeonVaultController implements GameController {
   }
   private geometry() { const cell = Math.min(this.w / 10, (this.h - 220) / 15); return { cell, ox: (this.w - cell * 10) / 2, oy: 104 } }
   private point(x: number, y: number) { const g = this.geometry(); return { x: g.ox + (x + .5) * g.cell, y: g.oy + (y + .5) * g.cell } }
+  private wallAt(x: number, y: number) { return NEON_VAULT_MAP[y]?.[x] === '1' }
+  private drawWall(ctx: CanvasRenderingContext2D, col: number, row: number, cell: number, ox: number, oy: number) {
+    const x = ox + col * cell, y = oy + row * cell
+    ctx.fillStyle = '#31051f'; ctx.fillRect(x, y, cell + .5, cell + .5)
+    ctx.fillStyle = '#650932'; ctx.fillRect(x + 5, y + 5, cell - 10, cell - 10)
+    ctx.strokeStyle = '#ff126d'; ctx.fillStyle = '#ff347f'; ctx.lineWidth = 2; ctx.shadowColor = '#ff075e'; ctx.shadowBlur = 7
+    const edge = (side: 'top' | 'right' | 'bottom' | 'left') => {
+      ctx.beginPath()
+      if (side === 'top') { ctx.moveTo(x, y + 1); ctx.lineTo(x + cell, y + 1) }
+      if (side === 'right') { ctx.moveTo(x + cell - 1, y); ctx.lineTo(x + cell - 1, y + cell) }
+      if (side === 'bottom') { ctx.moveTo(x, y + cell - 1); ctx.lineTo(x + cell, y + cell - 1) }
+      if (side === 'left') { ctx.moveTo(x + 1, y); ctx.lineTo(x + 1, y + cell) }
+      ctx.stroke()
+      for (let i = 5; i < cell - 3; i += 7) ctx.fillRect(side === 'left' ? x + 3 : side === 'right' ? x + cell - 5 : x + i, side === 'top' ? y + 3 : side === 'bottom' ? y + cell - 5 : y + i, side === 'top' || side === 'bottom' ? 3 : 2, side === 'left' || side === 'right' ? 3 : 2)
+    }
+    if (!this.wallAt(col, row - 1)) edge('top'); if (!this.wallAt(col + 1, row)) edge('right'); if (!this.wallAt(col, row + 1)) edge('bottom'); if (!this.wallAt(col - 1, row)) edge('left')
+  }
   render(ctx: CanvasRenderingContext2D) {
-    const bg = ctx.createLinearGradient(0, 0, 0, this.h); bg.addColorStop(0, this.theme.background); bg.addColorStop(1, '#10072b'); ctx.fillStyle = bg; ctx.fillRect(0, 0, this.w, this.h)
-    const { cell, ox, oy } = this.geometry(); ctx.save(); if (this.shake) ctx.translate(Math.sin(this.elapsed * 80) * this.shake * 8, Math.cos(this.elapsed * 63) * this.shake * 6); ctx.fillStyle = '#09081e'; ctx.fillRect(ox, oy, cell * 10, cell * 15)
-    for (let r = 0; r < 15; r++) for (let c = 0; c < 10; c++) if (NEON_VAULT_MAP[r][c] === '1') { const x = ox + c * cell + 2, y = oy + r * cell + 2; ctx.fillStyle = '#17113b'; ctx.shadowColor = '#6249e8'; ctx.shadowBlur = 8; ctx.fillRect(x, y, cell - 4, cell - 4); ctx.strokeStyle = '#6049d8'; ctx.strokeRect(x + 2, y + 2, cell - 8, cell - 8) }
-    for (const key of this.dots) { const [c, r] = key.split(',').map(Number), p = this.point(c, r); ctx.fillStyle = '#67ffe2'; ctx.shadowColor = '#54ffe0'; ctx.shadowBlur = 10; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill() }
+    ctx.fillStyle = '#020204'; ctx.fillRect(0, 0, this.w, this.h)
+    const { cell, ox, oy } = this.geometry(); ctx.save(); if (this.shake) ctx.translate(Math.sin(this.elapsed * 80) * this.shake * 8, Math.cos(this.elapsed * 63) * this.shake * 6); ctx.fillStyle = '#030308'; ctx.fillRect(ox, oy, cell * 10, cell * 15)
+    for (let r = 0; r < 15; r++) for (let c = 0; c < 10; c++) if (NEON_VAULT_MAP[r][c] === '1') this.drawWall(ctx, c, r, cell, ox, oy)
+    for (const key of this.dots) { const [c, r] = key.split(',').map(Number), p = this.point(c, r); ctx.fillStyle = '#f4ff2d'; ctx.shadowColor = '#eaff00'; ctx.shadowBlur = 9; ctx.fillRect(p.x - 2.5, p.y - 2.5, 5, 5) }
     for (const key of this.coins) { const [c, r] = key.split(',').map(Number), p = this.point(c, r); ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(this.elapsed * 2); ctx.fillStyle = '#ffe45f'; ctx.shadowColor = '#ffe45f'; ctx.shadowBlur = 18; ctx.fillRect(-5, -5, 10, 10); ctx.restore() }
     for (const [key] of PORTALS) { const [c, r] = key.split(',').map(Number), p = this.point(c, r); ctx.strokeStyle = key === '1,1' ? '#35d9ff' : '#bf50ff'; ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 18; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, cell * .27, this.elapsed * 2, this.elapsed * 2 + 4.8); ctx.stroke() }
-    for (const s of SPIKES) { const p = this.point(s.x, s.y), active = this.spikeActive(s); ctx.fillStyle = active ? '#ff3c91' : 'rgba(255,60,145,.22)'; ctx.shadowColor = '#ff3c91'; ctx.shadowBlur = active ? 16 : 4; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(p.x + i * 7 - 5, p.y + 8); ctx.lineTo(p.x + i * 7, p.y - (active ? 9 : 2)); ctx.lineTo(p.x + i * 7 + 5, p.y + 8); ctx.fill() } }
-    const ls = this.point(4, 3), le = this.point(6, 3); ctx.strokeStyle = this.laserActive() ? '#ff3ca6' : 'rgba(255,60,166,.28)'; ctx.lineWidth = this.laserActive() ? 5 : 2; if (!this.laserActive()) ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(ls.x - 12, ls.y); ctx.lineTo(le.x + 12, le.y); ctx.stroke(); ctx.setLineDash([])
+    for (const s of SPIKES) { const p = this.point(s.x, s.y), active = this.spikeActive(s); ctx.fillStyle = active ? '#19f7e7' : 'rgba(25,247,231,.2)'; ctx.shadowColor = '#00f5e1'; ctx.shadowBlur = active ? 18 : 4; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(p.x + i * 7 - 5, p.y + 8); ctx.lineTo(p.x + i * 7, p.y - (active ? 9 : 2)); ctx.lineTo(p.x + i * 7 + 5, p.y + 8); ctx.fill() } }
+    const ls = this.point(4, 3), le = this.point(6, 3); ctx.strokeStyle = this.laserActive() ? '#00f5df' : 'rgba(0,245,223,.28)'; ctx.lineWidth = this.laserActive() ? 5 : 2; if (!this.laserActive()) ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(ls.x - 12, ls.y); ctx.lineTo(le.x + 12, le.y); ctx.stroke(); ctx.setLineDash([])
     const shield = this.point(3, 5); if (!this.player.shield) { ctx.strokeStyle = '#6abfff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(shield.x, shield.y, 8, .3, 2.8); ctx.arc(shield.x, shield.y, 8, 3.5, 5.9); ctx.stroke() }
     const exit = this.point(EXIT.x, EXIT.y), open = !this.dots.size; ctx.strokeStyle = open ? '#54ffe0' : '#a52b55'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(exit.x, exit.y, 12, this.elapsed * 2, this.elapsed * 2 + 5); ctx.stroke(); if (!open) { ctx.fillStyle = '#ff668a'; ctx.font = '800 8px system-ui'; ctx.textAlign = 'center'; ctx.fillText(String(this.dots.size), exit.x, exit.y + 3) }
-    const enemy = this.point(this.enemy.x, 9); ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(this.elapsed + .8); ctx.fillStyle = '#ff3ca6'; ctx.fillRect(-7, -7, 14, 14); ctx.restore()
-    for (const t of this.trail) { const p = this.point(t.x, t.y); ctx.globalAlpha = t.life; ctx.fillStyle = '#45ffe0'; ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill() } ctx.globalAlpha = 1
+    const enemy = this.point(this.enemy.x, 9); ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(this.elapsed + .8); ctx.fillStyle = '#16f5e6'; ctx.shadowColor = '#00f5e1'; ctx.shadowBlur = 20; ctx.fillRect(-7, -7, 14, 14); ctx.fillStyle = '#032b2a'; ctx.fillRect(-3, -3, 6, 6); ctx.restore()
+    for (const t of this.trail) { const p = this.point(t.x, t.y); ctx.globalAlpha = t.life; ctx.fillStyle = '#f4ff2d'; ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill() } ctx.globalAlpha = 1
     for (const q of this.particles) { const p = this.point(q.x - .5, q.y - .5); ctx.globalAlpha = clamp(q.life * 2, 0, 1); ctx.fillStyle = q.color; ctx.fillRect(p.x, p.y, 4, 4) } ctx.globalAlpha = 1
-    if (this.dying <= 0) { const p = this.point(this.player.x, this.player.y), scale = this.clearing ? this.clearing / .72 : 1; ctx.fillStyle = '#eafff9'; ctx.shadowColor = '#45ffe0'; ctx.shadowBlur = 24; ctx.beginPath(); ctx.arc(p.x, p.y, 9 * scale, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#45ffe0'; ctx.beginPath(); ctx.arc(p.x, p.y, 5 * scale, 0, Math.PI * 2); ctx.fill(); if (this.player.shield) { ctx.strokeStyle = '#6abfff'; ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, Math.PI * 2); ctx.stroke() } }
-    ctx.restore(); ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(7,5,24,.8)'; ctx.fillRect(16, 54, this.w - 32, 42); ctx.font = '800 12px system-ui'; ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText('VAULT 01', 30, 80); ctx.fillStyle = '#65ffe3'; ctx.textAlign = 'center'; ctx.fillText(`SIGNALS ${this.dots.size}`, this.w / 2, 80); ctx.fillStyle = '#ffe45f'; ctx.textAlign = 'right'; ctx.fillText(`◆ ${this.collectedCoins}/3`, this.w - 30, 80)
+    if (this.dying <= 0) { const p = this.point(this.player.x, this.player.y), scale = this.clearing ? this.clearing / .72 : 1; ctx.fillStyle = '#fbff65'; ctx.shadowColor = '#eaff00'; ctx.shadowBlur = 24; ctx.beginPath(); ctx.arc(p.x, p.y, 9 * scale, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#9fae00'; ctx.fillRect(p.x - 3, p.y - 3, 6, 6); if (this.player.shield) { ctx.strokeStyle = '#6abfff'; ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, Math.PI * 2); ctx.stroke() } }
+    ctx.restore(); ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(0,0,0,.9)'; ctx.fillRect(16, 54, this.w - 32, 42); ctx.font = '800 12px monospace'; ctx.fillStyle = '#f4ff2d'; ctx.textAlign = 'left'; ctx.fillText('VAULT 01', 30, 80); ctx.fillStyle = '#ff2b79'; ctx.textAlign = 'center'; ctx.fillText(`SIGNALS ${this.dots.size}`, this.w / 2, 80); ctx.fillStyle = '#f4ff2d'; ctx.textAlign = 'right'; ctx.fillText(`◆ ${this.collectedCoins}/3`, this.w - 30, 80)
     if (this.toastLife > 0) { ctx.globalAlpha = Math.min(1, this.toastLife * 2); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '900 13px system-ui'; ctx.fillText(this.toast, this.w / 2, 119); ctx.globalAlpha = 1 }
     ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = '800 17px system-ui'; ctx.fillText(`${this.score} NEON`, this.w / 2, this.h - 80); ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.font = '700 11px system-ui'; ctx.fillText('SWIPE • SLIDE TO THE WALL', this.w / 2, this.h - 108)
   }
