@@ -118,6 +118,7 @@ class HoopFlightController extends BaseController {
     this.scoreEffects = this.scoreEffects.filter((effect) => effect.life > 0)
     this.ball.rotation += dt * (2.4 + Math.abs(this.ball.vy) * .002)
     this.speed = Math.min(235, 138 + this.elapsed * 1.65)
+    let missedHoop = false
     for (const hoop of this.hoops) {
       hoop.x -= this.speed * dt; hoop.pulse = Math.max(0, hoop.pulse - dt)
       hoop.netVelocity = (hoop.netVelocity ?? 0) - (hoop.netSwing ?? 0) * 48 * dt
@@ -146,17 +147,18 @@ class HoopFlightController extends BaseController {
         this.scoreFlash = clean ? .9 : .58
         if (this.cleanStreak >= 3) this.fireBurst = 1
       } else if (!hoop.passed && hoop.x + metrics.rimHalf < this.ball.x - this.ball.r) {
-        hoop.passed = true
-        this.cleanStreak = 0
+        missedHoop = true
+        break
       }
       if (insideOpening && this.ball.y > hoop.y + 5 && this.ball.y < hoop.y + metrics.height * .68) {
         this.ball.vx *= Math.pow(.55, dt)
       }
     }
+    if (missedHoop) { this.finish(); return }
     const last = this.hoops[this.hoops.length - 1]
     if (last.x < this.w - 180) this.hoops.push({ x: last.x + random(220, 295), y: random(this.h * .25, this.h * .68), passed: false, pulse: 0, netSwing: 0, netVelocity: 0, netPunch: 0 })
     this.hoops = this.hoops.filter((hoop) => hoop.x > -100)
-    if (this.ball.y > this.h - 75 || this.ball.y < 42 || this.ball.x < -45) this.finish()
+    if (this.ball.y > this.h - 75 || this.ball.y < 42 || this.ball.x + this.ball.r < 0) this.finish()
   }
   render(ctx: CanvasRenderingContext2D) {
     const paper = ctx.createLinearGradient(0, 0, 0, this.h)

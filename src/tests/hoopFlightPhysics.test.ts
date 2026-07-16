@@ -14,10 +14,11 @@ type InternalHoopFlight = GameController & {
 const makeController = () => {
   const game = gameRegistry.find((item) => item.id === 'hoop-flight')!
   const onScore = vi.fn()
-  const controller = game.createController({ preview: false, onScore, onFinish: vi.fn(), onImpact: vi.fn() }) as InternalHoopFlight
+  const onFinish = vi.fn()
+  const controller = game.createController({ preview: false, onScore, onFinish, onImpact: vi.fn() }) as InternalHoopFlight
   controller.resize(500, 844, 1)
   controller.restart()
-  return { controller, onScore }
+  return { controller, onScore, onFinish }
 }
 
 describe('Hoop Flight physics', () => {
@@ -85,5 +86,27 @@ describe('Hoop Flight physics', () => {
     expect(controller.cleanStreak).toBe(3)
     expect(controller.getScore()).toBe(6)
     expect(controller.scoreEffects.at(-1)?.label).toBe('FIRE ×3')
+  })
+
+  it('ends the run as soon as an unscored hoop passes behind the ball', () => {
+    const { controller, onFinish } = makeController()
+    controller.hoops = [{ x: controller.ball.x - 70, y: controller.ball.y - 150, passed: false, pulse: 0 }]
+
+    controller.update(1 / 60)
+
+    expect(controller.getStatus()).toBe('finished')
+    expect(onFinish).toHaveBeenCalledWith(0)
+  })
+
+  it('ends the run when the ball is completely pushed past the left edge', () => {
+    const { controller, onFinish } = makeController()
+    controller.hoops = [{ x: 420, y: 300, passed: false, pulse: 0 }]
+    controller.ball.x = -controller.ball.r - 2
+    controller.ball.vx = -200
+
+    controller.update(1 / 60)
+
+    expect(controller.getStatus()).toBe('finished')
+    expect(onFinish).toHaveBeenCalledWith(0)
   })
 })
