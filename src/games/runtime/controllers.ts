@@ -594,6 +594,7 @@ class LoopHoopsController extends BaseController {
     }
 
     this.collideWithRimUnderside(previous)
+    this.collideWithHoopConnector(previous)
     this.collideWithBackboard(previous)
     this.collideWithRim(previous)
     if (this.crossedInsideRim(previous)) this.scoreGoal()
@@ -673,6 +674,29 @@ class LoopHoopsController extends BaseController {
     const size = this.sideHoopSize(), inset = size * (.29 + .025)
     return side === -1 ? inset : this.w - inset
   }
+  private getHoopConnectorGeometry() {
+    const size = this.sideHoopSize(), boardCenter = this.target.x + this.target.side * size * .29
+    const boardInnerFace = boardCenter - this.target.side * size * .025
+    return {
+      start: { x: boardInnerFace, y: this.target.y - size * .14 },
+      end: { x: this.target.x + this.target.side * LOOP_RIM_HALF, y: this.target.y },
+      radius: size * .024,
+    }
+  }
+  private collideWithHoopConnector(previous: Point) {
+    const connector = this.getHoopConnectorGeometry(), wasCooling = this.ball.collisionCooldown > 0
+    for (let index = 0; index <= 4; index++) {
+      const t = index / 4
+      const x = connector.start.x + (connector.end.x - connector.start.x) * t
+      const y = connector.start.y + (connector.end.y - connector.start.y) * t
+      if (!this.resolveSweptLoopCircle(previous, x, y, connector.radius, 1.68)) continue
+      if (!wasCooling) this.stabilizeBallAfterImpact()
+      else {
+        this.cleanStreak = 0; this.touchedSurface = true; this.ball.kick = Math.max(this.ball.kick, .35)
+      }
+      return
+    }
+  }
   private collideWithRimUnderside(previous: Point) {
     if (this.ball.collisionCooldown > 0 || this.ball.vy >= 0) return
     const rimHalf = LOOP_RIM_HALF, undersideY = this.target.y + 6
@@ -689,32 +713,36 @@ class LoopHoopsController extends BaseController {
     if (this.ball.collisionCooldown > 0) return
     const rimHalf = LOOP_RIM_HALF
     for (const x of [this.target.x - rimHalf, this.target.x + rimHalf]) {
-      const radius = this.ball.r + LOOP_RIM_TUBE_RADIUS
-      const moveX = this.ball.x - previous.x, moveY = this.ball.y - previous.y
-      const fromX = previous.x - x, fromY = previous.y - this.target.y
-      const a = moveX * moveX + moveY * moveY
-      const b = 2 * (fromX * moveX + fromY * moveY)
-      const c = fromX * fromX + fromY * fromY - radius * radius
-      const discriminant = b * b - 4 * a * c
-      let hitTime: number | null = null
-      if (a > .0001 && discriminant >= 0) {
-        const root = Math.sqrt(discriminant), first = (-b - root) / (2 * a), second = (-b + root) / (2 * a)
-        if (first >= 0 && first <= 1) hitTime = first
-        else if (second >= 0 && second <= 1) hitTime = second
-      }
-      const currentDx = this.ball.x - x, currentDy = this.ball.y - this.target.y, currentDistance = Math.hypot(currentDx, currentDy)
-      if (hitTime === null && currentDistance >= radius) continue
-      if (hitTime !== null) { this.ball.x = previous.x + moveX * hitTime; this.ball.y = previous.y + moveY * hitTime }
-      const dx = this.ball.x - x, dy = this.ball.y - this.target.y, distanceToRim = Math.max(.001, Math.hypot(dx, dy))
-      const nx = dx / distanceToRim, ny = dy / distanceToRim
-      this.ball.x = x + nx * (radius + .5); this.ball.y = this.target.y + ny * (radius + .5)
-      const impact = this.ball.vx * nx + this.ball.vy * ny
-      if (impact < 0) {
-        this.ball.vx -= 1.7 * impact * nx; this.ball.vy -= 1.7 * impact * ny
-        this.ball.vx *= .96; this.ball.vy *= .96
-      }
+      if (!this.resolveSweptLoopCircle(previous, x, this.target.y, LOOP_RIM_TUBE_RADIUS, 1.7)) continue
       this.stabilizeBallAfterImpact(); return
     }
+  }
+  private resolveSweptLoopCircle(previous: Point, obstacleX: number, obstacleY: number, obstacleRadius: number, bounce: number) {
+    const radius = this.ball.r + obstacleRadius
+    const moveX = this.ball.x - previous.x, moveY = this.ball.y - previous.y
+    const fromX = previous.x - obstacleX, fromY = previous.y - obstacleY
+    const a = moveX * moveX + moveY * moveY
+    const b = 2 * (fromX * moveX + fromY * moveY)
+    const c = fromX * fromX + fromY * fromY - radius * radius
+    const discriminant = b * b - 4 * a * c
+    let hitTime: number | null = null
+    if (a > .0001 && discriminant >= 0) {
+      const root = Math.sqrt(discriminant), first = (-b - root) / (2 * a), second = (-b + root) / (2 * a)
+      if (first >= 0 && first <= 1) hitTime = first
+      else if (second >= 0 && second <= 1) hitTime = second
+    }
+    const currentDx = this.ball.x - obstacleX, currentDy = this.ball.y - obstacleY, currentDistance = Math.hypot(currentDx, currentDy)
+    if (hitTime === null && currentDistance >= radius) return false
+    if (hitTime !== null) { this.ball.x = previous.x + moveX * hitTime; this.ball.y = previous.y + moveY * hitTime }
+    const dx = this.ball.x - obstacleX, dy = this.ball.y - obstacleY, distanceToObstacle = Math.max(.001, Math.hypot(dx, dy))
+    const nx = dx / distanceToObstacle, ny = dy / distanceToObstacle
+    this.ball.x = obstacleX + nx * (radius + .5); this.ball.y = obstacleY + ny * (radius + .5)
+    const impact = this.ball.vx * nx + this.ball.vy * ny
+    if (impact < 0) {
+      this.ball.vx -= bounce * impact * nx; this.ball.vy -= bounce * impact * ny
+      this.ball.vx *= .96; this.ball.vy *= .96
+    }
+    return true
   }
   private stabilizeBallAfterImpact() {
     const speed = Math.hypot(this.ball.vx, this.ball.vy), maxSpeed = 860

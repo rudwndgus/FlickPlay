@@ -10,6 +10,7 @@ type LoopController = GameController & {
   rimHits: number
   touchedSurface: boolean
   scoreEffect: { x: number; y: number; life: number; label: string; points: number; clean: boolean; streak: number }
+  getHoopConnectorGeometry: () => { start: { x: number; y: number }; end: { x: number; y: number }; radius: number }
 }
 
 const makeController = () => {
@@ -100,6 +101,26 @@ describe('Loop Hoops physics', () => {
     expect(controller.getScore()).toBe(0)
     expect(controller.target.side).toBe(previousSide)
     expect(onScore).not.toHaveBeenCalled()
+  })
+
+  it('physically blocks the backboard-to-rim seam even during collision cooldown', () => {
+    const { controller } = makeController()
+    const connector = controller.getHoopConnectorGeometry()
+    const center = { x: (connector.start.x + connector.end.x) * .5, y: (connector.start.y + connector.end.y) * .5 }
+    const dx = connector.end.x - connector.start.x, dy = connector.end.y - connector.start.y
+    const length = Math.hypot(dx, dy), normal = { x: dy / length, y: -dx / length }
+    const clearance = controller.ball.r + connector.radius + 4
+    controller.ball.x = center.x + normal.x * clearance; controller.ball.y = center.y + normal.y * clearance
+    controller.ball.vx = -normal.x * 600; controller.ball.vy = -normal.y * 600
+    controller.ball.collisionCooldown = 1; controller.touchedSurface = false
+
+    controller.update(.03)
+
+    const sideDistance = (controller.ball.x - center.x) * normal.x + (controller.ball.y - center.y) * normal.y
+    expect(sideDistance).toBeGreaterThan(0)
+    expect(controller.ball.vx * normal.x + controller.ball.vy * normal.y).toBeGreaterThan(-200)
+    expect(controller.touchedSurface).toBe(true)
+    expect(controller.getScore()).toBe(0)
   })
 
   it('drains the refilled timer progressively faster as the score rises', () => {
