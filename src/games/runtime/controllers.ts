@@ -802,50 +802,214 @@ class LoopHoopsController extends BaseController {
   }
 }
 
-type Vehicle = { lane: number; x: number; speed: number; width: number; color: string }
+type CrossingFacing = 'up' | 'down' | 'left' | 'right'
+type CrossingRowKind = 'grass' | 'road' | 'water'
+type CrossingMover = { kind: 'car' | 'truck' | 'log'; speed: number; length: number; gap: number; offset: number; color: string }
+type CrossingRow = { index: number; type: CrossingRowKind; mover: CrossingMover | null; obstacles: number[]; coinCol: number | null }
+type CrossingSpan = { start: number; end: number }
+
+const CROSSING_COLS = 8
+const crossingModulo = (value: number, divisor: number) => ((value % divisor) + divisor) % divisor
+
 class CrossingRushController extends BaseController {
-  private player = { col: 3, row: 1, drawCol: 3, drawRow: 1, hop: 0 }
-  private vehicles: Vehicle[] = []
-  private rows: ('grass' | 'road' | 'water')[] = []
-  private moveClock = 0
-  private cell = 54
-  reset() {
-    this.player = { col: 3, row: 1, drawCol: 3, drawRow: 1, hop: 0 }; this.moveClock = 0
-    this.rows = Array.from({ length: 18 }, (_, i) => i < 3 || i % 6 === 0 ? 'grass' : i % 5 === 0 ? 'water' : 'road')
-    this.vehicles = Array.from({ length: 18 }, (_, i) => ({ lane: 3 + i % 13, x: (i * 103) % 520 - 70, speed: (i % 2 ? 1 : -1) * random(65, 130), width: i % 3 ? 55 : 88, color: ['#ff695d', '#ffd951', '#5c8dff'][i % 3] }))
-  }
-  constructor(theme: GameTheme, options: ControllerOptions) { super(theme, options); this.reset() }
-  swipe(dx: number, dy: number) {
-    if (Math.abs(dx) > Math.abs(dy)) this.player.col = clamp(this.player.col + (dx > 0 ? 1 : -1), 0, 6)
-    else this.player.row = Math.max(0, this.player.row + (dy < 0 ? 1 : -1))
-    this.player.hop = 1; this.addScore(Math.max(0, this.player.row - this.score)); this.options.onImpact('tap')
-  }
-  pointerDown(x: number, y: number) { this.drag = { x, y } }
+  private player = { col: 3, row: 1, drawCol: 3, drawRow: 1, hop: 0, facing: 'up' as CrossingFacing, riding: false }
+  private rows: CrossingRow[] = []
+  private collectedCoins = new Set<string>()
   private drag: Point | null = null
-  pointerUp(x: number, y: number) { if (this.drag) { this.swipe(x - this.drag.x, y - this.drag.y); this.drag = null } }
-  autopilot() { const r = Math.random(); this.swipe(r < .7 ? 0 : r < .85 ? -50 : 50, r < .7 ? -70 : 0) }
-  tick(dt: number) {
-    this.moveClock += dt; if (this.options.preview && this.moveClock > .72) { this.moveClock = 0; this.autopilot() }
-    this.player.drawCol += (this.player.col - this.player.drawCol) * Math.min(1, dt * 14); this.player.drawRow += (this.player.row - this.player.drawRow) * Math.min(1, dt * 14); this.player.hop = Math.max(0, this.player.hop - dt * 4)
-    for (const car of this.vehicles) { car.x += car.speed * dt; if (car.x > this.w + 100) car.x = -120; if (car.x < -130) car.x = this.w + 110 }
-    const car = this.vehicles.find((v) => v.lane === this.player.row && Math.abs(v.x + v.width / 2 - (this.player.col + .5) * this.cell) < v.width / 2 + 17)
-    if (car) this.finish()
-    const rowType = this.rows[this.player.row % this.rows.length]
-    if (rowType === 'water' && this.player.hop < .1) this.finish()
+  private moveClock = 0
+  private highRow = 1
+  private coinCount = 0
+  private seed = 0x51f15e
+  private segment = 0
+  private crashFlash = 0
+
+  constructor(theme: GameTheme, options: ControllerOptions) { super(theme, options); this.reset() }
+
+  reset() {
+    this.player = { col: 3, row: 1, drawCol: 3, drawRow: 1, hop: 0, facing: 'up', riding: false }
+    this.rows = []; this.collectedCoins.clear(); this.drag = null; this.moveClock = 0; this.highRow = 1; this.coinCount = 0; this.seed = 0x51f15e; this.segment = 0; this.crashFlash = 0
+    this.ensureRows(32)
   }
-  render(ctx: CanvasRenderingContext2D) {
-    const visibleRows = Math.ceil(this.h / this.cell) + 2, camera = Math.max(0, this.player.drawRow - 3)
-    ctx.fillStyle = '#6ba837'; ctx.fillRect(0, 0, this.w, this.h)
-    for (let i = 0; i < visibleRows; i++) {
-      const worldRow = Math.floor(camera) + i; const y = this.h - (worldRow - camera + 1) * this.cell; const type = this.rows[worldRow % this.rows.length]
-      ctx.fillStyle = type === 'grass' ? (worldRow % 2 ? '#75b946' : '#83c94b') : type === 'road' ? '#3c4148' : '#2784a6'; ctx.fillRect(0, y, this.w, this.cell + 1)
-      if (type === 'road') { ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.setLineDash([16, 18]); ctx.beginPath(); ctx.moveTo(0, y + this.cell / 2); ctx.lineTo(this.w, y + this.cell / 2); ctx.stroke(); ctx.setLineDash([]) }
-      if (type === 'grass' && worldRow % 4 === 0) { ctx.fillStyle = '#3e7b35'; ctx.beginPath(); ctx.arc(28 + (worldRow * 31) % (this.w - 56), y + 25, 12, 0, Math.PI * 2); ctx.fill() }
+
+  private nextRandom() { this.seed = (Math.imul(this.seed, 1664525) + 1013904223) >>> 0; return this.seed / 4294967296 }
+
+  private makeRow(index: number, type: CrossingRowKind): CrossingRow {
+    const difficulty = Math.min(1, index / 90)
+    let mover: CrossingMover | null = null
+    if (type === 'road') {
+      const truck = this.nextRandom() < .28
+      const length = truck ? 1.9 : 1.18
+      const gap = Math.max(1.35, 2.75 - difficulty * .95 + this.nextRandom() * .65)
+      const direction = index % 2 ? 1 : -1
+      mover = { kind: truck ? 'truck' : 'car', speed: direction * (1.35 + difficulty * 1.25 + this.nextRandom() * .48), length, gap, offset: this.nextRandom() * (length + gap), color: ['#f04f43', '#f8c943', '#49a9ec', '#f4f4ef', '#8d65d6'][index % 5] }
     }
-    for (const car of this.vehicles) { const y = this.h - (car.lane - camera + 1) * this.cell + 8; if (y < -60 || y > this.h) continue; ctx.fillStyle = car.color; roundedRect(ctx, car.x, y, car.width, 38, 10); ctx.fill(); ctx.fillStyle = '#172033'; ctx.fillRect(car.x + 10, y + 7, car.width - 20, 12) }
-    const px = (this.player.drawCol + .5) * this.cell, py = this.h - (this.player.drawRow - camera + .55) * this.cell - Math.sin(this.player.hop * Math.PI) * 16
-    ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(px, py, 17, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#273b2a'; ctx.fillRect(px - 12, py - 3, 24, 17); ctx.fillStyle = '#fff'; ctx.fillRect(px - 9, py - 7, 6, 7); ctx.fillRect(px + 3, py - 7, 6, 7)
-    drawGameLabel(ctx, 'SWIPE TO HOP', `${this.score}m`, this.w, this.h)
+    if (type === 'water') {
+      const length = 2.35 + this.nextRandom() * 1.15
+      const gap = 1.45 + difficulty * .7 + this.nextRandom() * .65
+      const direction = index % 2 ? -1 : 1
+      mover = { kind: 'log', speed: direction * (.62 + difficulty * .5 + this.nextRandom() * .28), length, gap, offset: this.nextRandom() * (length + gap), color: '#9a542c' }
+    }
+    const obstacles: number[] = []
+    if (type === 'grass' && index > 2) {
+      const count = 2 + Math.floor(this.nextRandom() * 3)
+      while (obstacles.length < count) {
+        const col = Math.floor(this.nextRandom() * CROSSING_COLS)
+        if (!obstacles.includes(col)) obstacles.push(col)
+      }
+    }
+    let coinCol: number | null = null
+    if (index >= 4 && (index % 3 === 0 || this.nextRandom() < .3)) {
+      coinCol = this.nextRandom() < .5 ? 0 : CROSSING_COLS - 1
+      if (type === 'grass') obstacles.splice(obstacles.indexOf(coinCol), obstacles.includes(coinCol) ? 1 : 0)
+    }
+    return { index, type, mover, obstacles, coinCol }
+  }
+
+  private ensureRows(maxRow: number) {
+    if (!this.rows.length) for (let i = 0; i < 3; i++) this.rows.push(this.makeRow(i, 'grass'))
+    while (this.rows.length <= maxRow) {
+      const useWater = this.segment % 3 === 1 || this.nextRandom() < .3
+      const hazardLength = useWater ? 2 + Math.floor(this.nextRandom() * 3) : 2 + Math.floor(this.nextRandom() * 3)
+      for (let i = 0; i < hazardLength; i++) this.rows.push(this.makeRow(this.rows.length, useWater ? 'water' : 'road'))
+      this.rows.push(this.makeRow(this.rows.length, 'grass'))
+      this.segment++
+    }
+  }
+
+  private spansFor(row: CrossingRow): CrossingSpan[] {
+    if (!row.mover) return []
+    const period = row.mover.length + row.mover.gap
+    const phase = crossingModulo(row.mover.offset + this.elapsed * row.mover.speed, period)
+    const spans: CrossingSpan[] = []
+    for (let start = phase - period * 3; start < CROSSING_COLS + period; start += period) spans.push({ start, end: start + row.mover.length })
+    return spans
+  }
+
+  private isBlocked(row: number, col: number) {
+    this.ensureRows(row + 18)
+    return this.rows[row]?.type === 'grass' && this.rows[row].obstacles.includes(col)
+  }
+
+  swipe(dx: number, dy: number) {
+    if (this.status !== 'playing' || this.player.hop > .45) return
+    const smallTap = Math.hypot(dx, dy) < 14
+    let nextCol = Math.round(this.player.col), nextRow = this.player.row
+    let facing: CrossingFacing
+    if (!smallTap && Math.abs(dx) > Math.abs(dy)) { nextCol += dx > 0 ? 1 : -1; facing = dx > 0 ? 'right' : 'left' }
+    else { nextRow += smallTap || dy < 0 ? 1 : -1; facing = smallTap || dy < 0 ? 'up' : 'down' }
+    nextCol = clamp(nextCol, 0, CROSSING_COLS - 1); nextRow = Math.max(0, nextRow)
+    this.ensureRows(nextRow + 24); this.player.facing = facing
+    if (this.isBlocked(nextRow, nextCol) || (nextCol === Math.round(this.player.col) && nextRow === this.player.row)) { this.player.hop = .3; this.options.onImpact('tap'); return }
+    this.player.col = nextCol; this.player.row = nextRow; this.player.riding = false; this.player.hop = 1
+    if (nextRow > this.highRow) { const gained = nextRow - this.highRow; this.highRow = nextRow; this.addScore(gained) }
+    this.options.onImpact('tap')
+  }
+
+  pointerDown(x: number, y: number) { this.drag = { x, y } }
+  pointerUp(x: number, y: number) { if (this.drag) { this.swipe(x - this.drag.x, y - this.drag.y); this.drag = null } }
+  autopilot() { const roll = this.nextRandom(); this.swipe(roll < .68 ? 0 : roll < .84 ? -55 : 55, roll < .68 ? -70 : 0) }
+
+  private moverAt(row: CrossingRow, x: number, padding = 0) { return this.spansFor(row).find((span) => x >= span.start + padding && x <= span.end - padding) }
+
+  private collectCoin() {
+    const row = this.rows[this.player.row], key = `${this.player.row},${row?.coinCol}`
+    if (row?.coinCol !== null && Math.abs(this.player.col - row.coinCol) < .38 && !this.collectedCoins.has(key)) {
+      this.collectedCoins.add(key); this.coinCount++; this.addScore(5)
+    }
+  }
+
+  tick(dt: number) {
+    this.moveClock += dt; this.crashFlash = Math.max(0, this.crashFlash - dt * 3.5)
+    if (this.options.preview && this.moveClock > .7) { this.moveClock = 0; this.autopilot() }
+    this.ensureRows(this.player.row + 28)
+    this.player.hop = Math.max(0, this.player.hop - dt * 4.2)
+    const row = this.rows[this.player.row]
+    if (row?.type === 'water' && this.player.hop < .1) {
+      const log = this.moverAt(row, this.player.col, .18)
+      if (!log) { this.crashFlash = 1; this.finish(); return }
+      this.player.riding = true; this.player.col += (row.mover?.speed ?? 0) * dt
+      if (this.player.col < -.35 || this.player.col > CROSSING_COLS - .65) { this.crashFlash = 1; this.finish(); return }
+    } else if (row?.type !== 'water') this.player.riding = false
+    if (row?.type === 'road' && this.player.hop < .55 && this.moverAt(row, this.player.col, -.18)) { this.crashFlash = 1; this.finish(); return }
+    if (this.player.hop < .08) this.collectCoin()
+    this.player.drawCol += (this.player.col - this.player.drawCol) * Math.min(1, dt * 15)
+    this.player.drawRow += (this.player.row - this.player.drawRow) * Math.min(1, dt * 13)
+  }
+
+  private drawVoxelBox(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, depth: number, top: string, front: string, side: string) {
+    ctx.fillStyle = front; ctx.fillRect(x, y, width, height)
+    ctx.fillStyle = top; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + depth, y - depth); ctx.lineTo(x + width + depth, y - depth); ctx.lineTo(x + width, y); ctx.closePath(); ctx.fill()
+    ctx.fillStyle = side; ctx.beginPath(); ctx.moveTo(x + width, y); ctx.lineTo(x + width + depth, y - depth); ctx.lineTo(x + width + depth, y + height - depth); ctx.lineTo(x + width, y + height); ctx.closePath(); ctx.fill()
+  }
+
+  private drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, variant: number) {
+    this.drawVoxelBox(ctx, x - size * .1, y - size * .05, size * .2, size * .38, 3, '#9a6634', '#70421f', '#573119')
+    const greens = variant % 2 ? ['#8dd33e', '#5fae2f', '#428828'] : ['#78c83b', '#4d9e2b', '#347822']
+    this.drawVoxelBox(ctx, x - size * .34, y - size * .48, size * .68, size * .54, 6, greens[0], greens[1], greens[2])
+  }
+
+  private drawVehicle(ctx: CanvasRenderingContext2D, row: CrossingRow, span: CrossingSpan, y: number, cell: number, rowHeight: number) {
+    const mover = row.mover!; const movingRight = mover.speed > 0; const x = span.start * cell; const width = mover.length * cell; const bodyY = y + rowHeight * .25
+    ctx.fillStyle = '#1c2730'; ctx.fillRect(x + width * .13, bodyY + rowHeight * .47, width * .18, 6); ctx.fillRect(x + width * .68, bodyY + rowHeight * .47, width * .18, 6)
+    this.drawVoxelBox(ctx, x, bodyY, width, rowHeight * .38, 6, mover.color, mover.color, '#b52d31')
+    const cabWidth = mover.kind === 'truck' ? width * .36 : width * .56; const cabX = movingRight ? x + width - cabWidth - 5 : x + 5
+    this.drawVoxelBox(ctx, cabX, bodyY - rowHeight * .14, cabWidth, rowHeight * .25, 5, '#e9f7ff', '#7ec4dc', '#4c91ae')
+    ctx.fillStyle = '#263c50'; ctx.fillRect(movingRight ? cabX + cabWidth * .58 : cabX + 3, bodyY - rowHeight * .08, cabWidth * .34, rowHeight * .13)
+  }
+
+  private drawLog(ctx: CanvasRenderingContext2D, span: CrossingSpan, y: number, cell: number, rowHeight: number) {
+    const x = span.start * cell, width = (span.end - span.start) * cell, logY = y + rowHeight * .3
+    this.drawVoxelBox(ctx, x, logY, width, rowHeight * .32, 4, '#c87836', '#985027', '#69351f')
+    ctx.fillStyle = '#e5a04f'; ctx.fillRect(x + 5, logY + 4, 4, rowHeight * .2); ctx.fillRect(x + width - 13, logY + 4, 4, rowHeight * .2)
+  }
+
+  private drawCoin(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4); ctx.shadowColor = '#ffec55'; ctx.shadowBlur = 12
+    this.drawVoxelBox(ctx, -size / 2, -size / 2, size, size, 3, '#fff17b', '#ffc928', '#e99718')
+    ctx.restore()
+  }
+
+  private drawPlayer(ctx: CanvasRenderingContext2D, x: number, y: number, cell: number) {
+    const size = cell * .62; const hopY = Math.sin(this.player.hop * Math.PI) * cell * .3
+    ctx.save(); ctx.translate(x, y - hopY)
+    ctx.fillStyle = 'rgba(20,45,20,.25)'; ctx.beginPath(); ctx.ellipse(0, size * .48 + hopY, size * .42, size * .17, 0, 0, Math.PI * 2); ctx.fill()
+    this.drawVoxelBox(ctx, -size * .34, -size * .03, size * .68, size * .58, 5, '#fff4bd', '#f1d77a', '#c9ad57')
+    this.drawVoxelBox(ctx, -size * .3, -size * .42, size * .6, size * .43, 5, '#fffce0', '#f8e9a5', '#d9c16c')
+    const facingX = this.player.facing === 'left' ? -1 : this.player.facing === 'right' ? 1 : 0
+    const facingY = this.player.facing === 'down' ? 1 : -1
+    ctx.fillStyle = '#18251f'
+    if (facingX) { ctx.fillRect(facingX * size * .18 - 2, -size * .27, 4, 5); ctx.fillStyle = '#f26b32'; ctx.fillRect(facingX > 0 ? size * .3 : -size * .43, -size * .18, size * .14, size * .12) }
+    else { ctx.fillRect(-size * .18, facingY < 0 ? -size * .35 : -size * .12, 4, 5); ctx.fillRect(size * .1, facingY < 0 ? -size * .35 : -size * .12, 4, 5); ctx.fillStyle = '#f26b32'; ctx.fillRect(-size * .12, facingY < 0 ? -size * .48 : size * .02, size * .24, size * .12) }
+    ctx.restore()
+  }
+
+  render(ctx: CanvasRenderingContext2D) {
+    const cell = this.w / CROSSING_COLS, rowHeight = Math.min(58, cell * .98), visibleRows = Math.ceil(this.h / rowHeight) + 5
+    const camera = Math.max(0, this.player.drawRow - 3.5); const firstRow = Math.max(0, Math.floor(camera)); this.ensureRows(firstRow + visibleRows + 2)
+    const sky = ctx.createLinearGradient(0, 0, 0, this.h); sky.addColorStop(0, '#b8ec7c'); sky.addColorStop(1, '#659f32'); ctx.fillStyle = sky; ctx.fillRect(0, 0, this.w, this.h)
+    for (let worldRow = firstRow + visibleRows; worldRow >= firstRow; worldRow--) {
+      const row = this.rows[worldRow]; if (!row) continue
+      const y = this.h - (worldRow - camera + 1) * rowHeight
+      if (row.type === 'grass') {
+        ctx.fillStyle = worldRow % 2 ? '#83cb3f' : '#91d848'; ctx.fillRect(0, y, this.w, rowHeight + 1)
+        ctx.fillStyle = 'rgba(255,255,255,.08)'; for (let col = worldRow % 2; col < CROSSING_COLS; col += 2) ctx.fillRect(col * cell, y, cell, rowHeight * .16)
+      } else if (row.type === 'road') {
+        ctx.fillStyle = '#596063'; ctx.fillRect(0, y, this.w, rowHeight + 1); ctx.fillStyle = '#747b79'; ctx.fillRect(0, y, this.w, 5); ctx.fillStyle = 'rgba(255,246,189,.46)'
+        for (let x = (worldRow % 2) * cell; x < this.w; x += cell * 2) ctx.fillRect(x, y + rowHeight * .52, cell * .72, 3)
+      } else {
+        ctx.fillStyle = '#2aa8ca'; ctx.fillRect(0, y, this.w, rowHeight + 1); ctx.fillStyle = 'rgba(135,235,244,.38)'
+        for (let x = crossingModulo(worldRow * 31 + this.elapsed * 22, cell * 2) - cell * 2; x < this.w; x += cell * 2) ctx.fillRect(x, y + rowHeight * .22, cell * .8, 3)
+      }
+      if (row.type === 'grass') for (const col of row.obstacles) this.drawTree(ctx, (col + .5) * cell, y + rowHeight * .55, cell * .8, worldRow + col)
+      if (row.type === 'road') for (const span of this.spansFor(row)) this.drawVehicle(ctx, row, span, y, cell, rowHeight)
+      if (row.type === 'water') for (const span of this.spansFor(row)) this.drawLog(ctx, span, y, cell, rowHeight)
+      const coinKey = `${worldRow},${row.coinCol}`
+      if (row.coinCol !== null && !this.collectedCoins.has(coinKey)) this.drawCoin(ctx, (row.coinCol + .5) * cell, y + rowHeight * .35 - Math.sin(this.elapsed * 4 + worldRow) * 5, cell * .24)
+    }
+    const px = (this.player.drawCol + .5) * cell, py = this.h - (this.player.drawRow - camera + .5) * rowHeight
+    this.drawPlayer(ctx, px, py, cell)
+    if (this.crashFlash > 0) { ctx.fillStyle = `rgba(255,65,45,${this.crashFlash * .28})`; ctx.fillRect(0, 0, this.w, this.h) }
+    drawGameLabel(ctx, 'SWIPE • RIDE THE LOGS', `${this.highRow - 1}m  ◆ ${this.coinCount}`, this.w, this.h)
   }
 }
 
