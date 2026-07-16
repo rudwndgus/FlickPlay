@@ -515,32 +515,150 @@ class DunkClimbController extends BaseController {
 }
 
 class LoopHoopsController extends BaseController {
-  private ball = { x: 190, y: 530, vx: -105, vy: 0, r: 18 }
-  private target = { side: -1, x: 62, y: 315 }
+  private ball = { x: 240, y: 530, vx: -175, vy: -80, r: 18, rotation: 0, kick: 0, collisionCooldown: 0 }
+  private target = { side: -1 as -1 | 1, x: 82, y: 330, pulse: 0, netPunch: 0 }
+  private timeLeft = 1
+  private cleanStreak = 0
+  private rimHits = 0
+  private touchedSurface = false
   private autoClock = 0
-  private loops = 0
-  reset() { this.ball = { x: this.w * .5, y: this.h * .62, vx: -115, vy: -40, r: 18 }; this.target = { side: -1, x: 62, y: random(this.h * .28, this.h * .52) }; this.loops = 0; this.autoClock = 0 }
-  constructor(theme: GameTheme, options: ControllerOptions) { super(theme, options); this.reset() }
-  pointerDown() { this.ball.vy = -390; this.ball.vx = this.target.side * (120 + Math.min(this.score * 6, 80)); this.options.onImpact('tap') }
-  autopilot() { if (this.ball.y > this.target.y + 15 || this.ball.vy > 150) this.pointerDown() }
+  private trail: Array<Point & { life: number }> = []
+  private scoreEffect = { life: 0, label: '', points: 0 }
+  private readonly hoopImage: HTMLImageElement
+
+  reset() {
+    this.ball = { x: this.w * .62, y: this.h * .63, vx: -175, vy: -80, r: 18, rotation: 0, kick: 0, collisionCooldown: 0 }
+    this.target = { side: -1, x: 82, y: this.h * .4, pulse: 0, netPunch: 0 }
+    this.timeLeft = 1; this.cleanStreak = 0; this.rimHits = 0; this.touchedSurface = false; this.autoClock = 0; this.trail = []; this.scoreEffect = { life: 0, label: '', points: 0 }
+  }
+  constructor(theme: GameTheme, options: ControllerOptions) {
+    super(theme, options)
+    this.hoopImage = new Image()
+    this.hoopImage.src = `${import.meta.env.BASE_URL}games/loop-hoops/side-hoop.png`
+    this.reset()
+  }
+  pointerDown() {
+    if (this.status === 'finished') return
+    this.ball.y -= 8
+    this.ball.vy = -570
+    this.ball.vx = this.target.side * Math.min(245, 175 + this.score * 2.5)
+    this.ball.kick = 1
+    this.options.onImpact('tap')
+  }
+  autopilot() { if (this.ball.y > this.target.y + 24 || this.ball.vy > 230) this.pointerDown() }
   tick(dt: number) {
-    if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .58) { this.autoClock = 0; this.autopilot() } }
-    const prevY = this.ball.y; this.ball.vy += 760 * dt; this.ball.x += this.ball.vx * dt; this.ball.y += this.ball.vy * dt
-    if (this.ball.x < -this.ball.r) { this.ball.x = this.w + this.ball.r; this.loops++ }
-    if (this.ball.x > this.w + this.ball.r) { this.ball.x = -this.ball.r; this.loops++ }
-    if (prevY < this.target.y && this.ball.y >= this.target.y && Math.abs(this.ball.x - this.target.x) < 50) {
-      this.addScore(this.loops > 0 ? 2 : 1); this.loops = 0; this.target.side *= -1; this.target.x = this.target.side < 0 ? 62 : this.w - 62; this.target.y = random(this.h * .26, this.h * .52); this.ball.vx = this.target.side * 125
+    if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .38) { this.autoClock = 0; this.autopilot() } }
+    const drainRate = Math.min(.24, .078 + this.elapsed * .0017 + this.score * .004)
+    this.timeLeft = Math.max(0, this.timeLeft - drainRate * dt)
+    if (this.timeLeft <= 0) { this.finish(); return }
+
+    const previousY = this.ball.y
+    this.ball.vy = Math.min(900, this.ball.vy + 1850 * dt)
+    this.ball.x += this.ball.vx * dt; this.ball.y += this.ball.vy * dt
+    this.ball.rotation += dt * (4 + Math.abs(this.ball.vx) * .012)
+    this.ball.kick = Math.max(0, this.ball.kick - dt * 7.5)
+    this.ball.collisionCooldown = Math.max(0, this.ball.collisionCooldown - dt)
+    this.target.pulse = Math.max(0, this.target.pulse - dt * 2.4)
+    this.target.netPunch = Math.max(0, this.target.netPunch - dt * 3)
+    this.scoreEffect.life = Math.max(0, this.scoreEffect.life - dt * 1.35)
+    this.trail.forEach((point) => { point.life -= dt }); this.trail = this.trail.filter((point) => point.life > 0)
+    this.trail.unshift({ x: this.ball.x, y: this.ball.y, life: this.cleanStreak >= 3 ? .62 : .3 })
+    if (this.trail.length > (this.cleanStreak >= 3 ? 22 : 11)) this.trail.pop()
+
+    const ceiling = 104 + this.ball.r, floor = this.h - 74 - this.ball.r
+    if (this.ball.y < ceiling) { this.ball.y = ceiling; this.ball.vy = Math.abs(this.ball.vy) * .72; this.touchedSurface = true }
+    if (this.ball.y > floor) {
+      this.ball.y = floor; this.ball.vy = -Math.max(350, Math.abs(this.ball.vy) * .72); this.ball.kick = .55; this.touchedSurface = true; this.options.onImpact('tap')
     }
-    if (this.ball.y > this.h - 55 || this.ball.y < 25) this.finish()
+    if (this.ball.x < this.ball.r || this.ball.x > this.w - this.ball.r) {
+      this.ball.x = clamp(this.ball.x, this.ball.r, this.w - this.ball.r); this.ball.vx *= -.76; this.touchedSurface = true; this.options.onImpact('tap')
+    }
+
+    this.collideWithRim()
+    const rimHalf = 36
+    const insideOpening = Math.abs(this.ball.x - this.target.x) < rimHalf - this.ball.r * .35
+    if (previousY <= this.target.y && this.ball.y > this.target.y && this.ball.vy > 0 && insideOpening) this.scoreGoal()
   }
   render(ctx: CanvasRenderingContext2D) {
-    this.paintBackdrop(ctx, '#0f91a0', '#042d3c')
-    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1
-    for (let x = 24; x < this.w; x += 46) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, this.h); ctx.stroke() }
-    drawSideHoop(ctx, this.target.x, this.target.y, .5, this.theme.accent)
-    if (this.score >= 4) { ctx.strokeStyle = 'rgba(255,235,83,.35)'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(this.ball.x - this.ball.vx * .12, this.ball.y - this.ball.vy * .05); ctx.lineTo(this.ball.x, this.ball.y); ctx.stroke() }
-    drawBasketball(ctx, this.ball.x, this.ball.y, this.ball.r, this.elapsed * 4, this.score >= 4)
-    drawGameLabel(ctx, this.target.side < 0 ? '◀ LEFT HOOP' : 'RIGHT HOOP ▶', `${this.score} loops`, this.w, this.h)
+    const backdrop = ctx.createRadialGradient(this.w * .5, this.h * .48, 40, this.w * .5, this.h * .48, this.h * .72)
+    backdrop.addColorStop(0, '#6d574a'); backdrop.addColorStop(.52, '#584236'); backdrop.addColorStop(1, '#3b281f')
+    ctx.fillStyle = backdrop; ctx.fillRect(0, 0, this.w, this.h)
+    ctx.fillStyle = 'rgba(255,205,155,.035)'; for (let i = 0; i < 42; i++) { ctx.beginPath(); ctx.arc((i * 83) % this.w, (i * 137) % this.h, 2 + i % 3, 0, Math.PI * 2); ctx.fill() }
+    this.drawTimer(ctx)
+    this.drawSideHoopImage(ctx, false)
+    this.drawBallTrail(ctx)
+    ctx.fillStyle = 'rgba(20,10,6,.34)'; ctx.beginPath(); ctx.ellipse(this.ball.x, this.h - 70, 22 + Math.abs(this.ball.y - (this.h - 70)) * .015, 7, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.save(); ctx.translate(this.ball.x, this.ball.y); ctx.scale(1 + this.ball.kick * .16, 1 - this.ball.kick * .1); drawBasketball(ctx, 0, 0, this.ball.r, this.ball.rotation, this.cleanStreak >= 3); ctx.restore()
+    this.drawSideHoopImage(ctx, true)
+    this.drawScoreEffect(ctx)
+    ctx.fillStyle = 'rgba(255,255,255,.62)'; ctx.font = '800 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('TAP TO BOUNCE  •  BEAT THE CLOCK', this.w * .5, this.h - 38)
+  }
+  private scoreGoal() {
+    const clean = this.rimHits === 0 && !this.touchedSurface
+    this.cleanStreak = clean ? this.cleanStreak + 1 : 0
+    const points = clean ? Math.min(3, this.cleanStreak) : 1
+    this.setScore(this.score + points); this.options.onImpact(clean ? 'perfect' : 'score')
+    this.scoreEffect = { life: 1, label: clean ? (this.cleanStreak >= 3 ? `PERFECT ×${this.cleanStreak}` : this.cleanStreak === 2 ? 'PERFECT ×2' : 'CLEAN!') : 'SCORE!', points }
+    this.timeLeft = 1
+    this.target.side = this.target.side === -1 ? 1 : -1
+    this.target.x = this.target.side === -1 ? 82 : this.w - 82
+    this.target.y = random(this.h * .27, this.h * .55)
+    this.target.pulse = 1; this.target.netPunch = 1
+    this.ball.vx = this.target.side * Math.min(245, 178 + this.score * 2.5)
+    this.rimHits = 0; this.touchedSurface = false
+  }
+  private collideWithRim() {
+    if (this.ball.collisionCooldown > 0) return
+    const rimHalf = 36
+    for (const x of [this.target.x - rimHalf, this.target.x + rimHalf]) {
+      const dx = this.ball.x - x, dy = this.ball.y - this.target.y, distanceToRim = Math.hypot(dx, dy), minDistance = this.ball.r + 4
+      if (distanceToRim === 0 || distanceToRim >= minDistance) continue
+      const nx = dx / distanceToRim, ny = dy / distanceToRim, overlap = minDistance - distanceToRim
+      this.ball.x += nx * overlap; this.ball.y += ny * overlap
+      const impact = this.ball.vx * nx + this.ball.vy * ny
+      if (impact < 0) { this.ball.vx -= 1.7 * impact * nx; this.ball.vy -= 1.7 * impact * ny }
+      this.ball.collisionCooldown = .065; this.rimHits++; this.cleanStreak = 0; this.options.onImpact('tap'); return
+    }
+  }
+  private drawTimer(ctx: CanvasRenderingContext2D) {
+    const x = 58, y = 98, width = this.w - 116, height = 25
+    ctx.fillStyle = 'rgba(13,13,14,.72)'; ctx.fillRect(x, y, width, height)
+    const color = this.timeLeft > .28 ? '#18e9ed' : '#ff3f63'
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = this.timeLeft < .3 ? 16 : 8; ctx.fillRect(x, y, width * this.timeLeft, height); ctx.shadowBlur = 0
+    ctx.fillStyle = 'rgba(255,255,255,.15)'; ctx.fillRect(x, y, width * this.timeLeft, 6)
+    ctx.fillStyle = '#fff'; ctx.fillRect(this.w - 38, y, 8, height); ctx.fillRect(this.w - 22, y, 8, height)
+    ctx.fillStyle = '#17110e'; ctx.fillRect(this.w - 38, y + height - 5, 8, 5); ctx.fillRect(this.w - 22, y + height - 5, 8, 5)
+    ctx.fillStyle = 'rgba(255,255,255,.86)'; ctx.font = '900 15px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(String(this.score), 20, y + height * .5)
+  }
+  private drawSideHoopImage(ctx: CanvasRenderingContext2D, foreground: boolean) {
+    if (!this.hoopImage.complete || !this.hoopImage.naturalWidth) return
+    const size = Math.min(190, this.w * .49), sourceY = this.hoopImage.naturalHeight * .57
+    ctx.save(); ctx.translate(this.target.x, this.target.y); if (this.target.side === 1) ctx.scale(-1, 1)
+    if (this.target.pulse > 0) { ctx.shadowColor = '#ff1996'; ctx.shadowBlur = 32 * this.target.pulse }
+    if (!foreground) ctx.drawImage(this.hoopImage, -size * .586, -size * .586, size, size)
+    else {
+      const punch = this.target.netPunch
+      ctx.scale(1, 1 + Math.sin((1 - punch) * Math.PI * 3) * punch * .18)
+      ctx.drawImage(this.hoopImage, 0, sourceY, this.hoopImage.naturalWidth, this.hoopImage.naturalHeight - sourceY, -size * .586, -size * .016, size, size * .43)
+    }
+    ctx.restore()
+  }
+  private drawBallTrail(ctx: CanvasRenderingContext2D) {
+    this.trail.forEach((point, index) => {
+      const fire = this.cleanStreak >= 3, alpha = point.life / (fire ? .62 : .3)
+      ctx.fillStyle = fire ? (index < 5 ? `rgba(255,238,30,${alpha * .78})` : index < 13 ? `rgba(255,93,20,${alpha * .55})` : `rgba(196,30,25,${alpha * .3})`) : `rgba(26,15,12,${alpha * .16})`
+      ctx.shadowColor = fire ? (index < 6 ? '#fff02b' : '#ff4b1f') : 'transparent'; ctx.shadowBlur = fire ? 18 : 0
+      ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(4, this.ball.r - index * .48), 0, Math.PI * 2); ctx.fill()
+    })
+    ctx.shadowBlur = 0
+  }
+  private drawScoreEffect(ctx: CanvasRenderingContext2D) {
+    if (this.scoreEffect.life <= 0) return
+    const alpha = Math.min(1, this.scoreEffect.life * 2), rise = (1 - this.scoreEffect.life) * 34
+    ctx.save(); ctx.globalAlpha = alpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.shadowColor = this.cleanStreak >= 3 ? '#ff641f' : '#24160f'; ctx.shadowBlur = this.cleanStreak >= 3 ? 22 : 10
+    ctx.font = '900 76px system-ui'; ctx.fillText(String(this.score), this.w * .5, this.h * .46 - rise)
+    ctx.font = '900 24px system-ui'; ctx.fillText(this.scoreEffect.label, this.w * .5, this.h * .46 + 56 - rise)
+    ctx.restore()
   }
 }
 
@@ -736,13 +854,6 @@ const drawBasketball = (ctx: CanvasRenderingContext2D, x: number, y: number, r: 
   ctx.save(); ctx.translate(x, y); ctx.rotate(rotation); if (fire) { ctx.shadowColor = '#ffdb39'; ctx.shadowBlur = 28 }
   const gradient = ctx.createRadialGradient(-r * .3, -r * .35, 2, 0, 0, r); gradient.addColorStop(0, '#ffb340'); gradient.addColorStop(1, '#df5224'); ctx.fillStyle = gradient; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill()
   ctx.strokeStyle = '#6f271f'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.moveTo(0, -r); ctx.bezierCurveTo(-r * .55, -r * .2, -r * .55, r * .2, 0, r); ctx.moveTo(0, -r); ctx.bezierCurveTo(r * .55, -r * .2, r * .55, r * .2, 0, r); ctx.stroke(); ctx.restore()
-}
-
-const drawSideHoop = (ctx: CanvasRenderingContext2D, x: number, y: number, pulse: number, accent: string) => {
-  ctx.save(); if (pulse > 0) { ctx.shadowColor = accent; ctx.shadowBlur = 28 }
-  ctx.strokeStyle = '#ff563b'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(x - 48, y); ctx.lineTo(x + 48, y); ctx.stroke(); ctx.strokeStyle = 'rgba(255,255,255,.65)'; ctx.lineWidth = 2
-  for (let i = -36; i < 40; i += 14) { ctx.beginPath(); ctx.moveTo(x + i, y + 3); ctx.lineTo(x + i * .55, y + 43); ctx.stroke() }
-  ctx.restore()
 }
 
 const drawGameLabel = (ctx: CanvasRenderingContext2D, hint: string, metric: string, w: number, h: number) => {

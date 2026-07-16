@@ -22,11 +22,11 @@ const definitions: Definition[] = [
   },
   {
     id: 'loop-hoops', slug: 'loop-hoops', title: 'Loop Hoops', kicker: 'SIDE TO SIDE', icon: 'LH', category: 'Loop Basketball',
-    shortDescription: '화면의 경계를 넘어 좌우 골대를 번갈아 공략하세요.',
-    fullDescription: '탭으로 튀어 오르고 화면 양 끝을 루프하세요. 반대편 골대를 통과할 때마다 진행 방향이 뒤집힙니다.',
-    theme: { background: '#087d8b', surface: '#032f3a', accent: '#f8ea58', accent2: '#ff5d8f', text: '#edffff', muted: '#98dde0', headerStyle: 'glass' },
-    controls: [{ label: '탭', description: '목표 골대 방향으로 튀어 오릅니다.' }],
-    scoringRules: [{ label: '루프 골', value: '+1' }, { label: '경계 통과 골', value: 'LOOP SHOT' }],
+    shortDescription: '시간이 다 되기 전에 좌우 골대를 빠르게 번갈아 공략하세요.',
+    fullDescription: '탭으로 공을 통통 튀겨 높이가 달라지는 좌우 골대에 넣으세요. 골을 넣으면 시간이 충전되고 연속 클린샷은 불꽃 모드를 켭니다.',
+    theme: { background: '#60493c', surface: '#37251e', accent: '#16e8eb', accent2: '#ff198f', text: '#ffffff', muted: '#cdb7aa', headerStyle: 'dark' },
+    controls: [{ label: '탭', description: '공을 즉시 위로 튕기고 목표 골대 방향으로 이동합니다.' }],
+    scoringRules: [{ label: '골', value: '+1' }, { label: '연속 클린샷', value: 'PERFECT / FIRE' }, { label: '제한 시간', value: '골 성공 시 충전' }],
   },
   {
     id: 'crossing-rush', slug: 'crossing-rush', title: 'Crossing Rush', kicker: 'ONE MORE STEP', icon: 'CR', category: 'Endless Crossing',
