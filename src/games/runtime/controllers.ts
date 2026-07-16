@@ -77,7 +77,7 @@ class HoopFlightController extends BaseController {
   constructor(theme: GameTheme, options: ControllerOptions) {
     super(theme, options)
     this.hoopImage = new Image()
-    this.hoopImage.src = `${import.meta.env.BASE_URL}games/hoop-flight/hoop.png`
+    this.hoopImage.src = `${import.meta.env.BASE_URL}games/hoop-flight/hoop-arcade.png`
     this.reset()
   }
   pointerDown() {
@@ -192,11 +192,11 @@ class HoopFlightController extends BaseController {
     ctx.restore()
   }
   private getHoopMetrics(hoop: Hoop) {
-    const width = Math.min(104, this.w * .27)
-    const height = width * (483 / 560)
+    const width = Math.min(128, this.w * .32)
+    const height = width
     const left = hoop.x - width * .5
-    const top = hoop.y - height * .135
-    return { hoop, width, height, left, top, rimHalf: width * .43 }
+    const top = hoop.y - height * .28
+    return { hoop, width, height, left, top, rimHalf: width * .36 }
   }
   private collideWithHoop(metrics: ReturnType<HoopFlightController['getHoopMetrics']>) {
     if (this.ball.collisionCooldown > 0) return
@@ -229,19 +229,19 @@ class HoopFlightController extends BaseController {
     ctx.save()
     if (hoop.pulse > 0) { ctx.shadowColor = '#fff27b'; ctx.shadowBlur = 34 * hoop.pulse }
     if (!foreground) {
-      const sourceHeight = this.hoopImage.naturalHeight * .24
-      ctx.drawImage(this.hoopImage, 0, 0, this.hoopImage.naturalWidth, sourceHeight, left, top, width, height * .24)
+      const sourceHeight = this.hoopImage.naturalHeight * .39
+      ctx.drawImage(this.hoopImage, 0, 0, this.hoopImage.naturalWidth, sourceHeight, left, top, width, height * .39)
     } else {
-      const rimSourceY = this.hoopImage.naturalHeight * .105
-      const netSourceY = this.hoopImage.naturalHeight * .22
+      const rimSourceY = this.hoopImage.naturalHeight * .27
+      const netSourceY = this.hoopImage.naturalHeight * .39
       const rimSourceHeight = netSourceY - rimSourceY
-      ctx.drawImage(this.hoopImage, 0, rimSourceY, this.hoopImage.naturalWidth, rimSourceHeight, left, top + height * .105, width, height * .115)
+      ctx.drawImage(this.hoopImage, 0, rimSourceY, this.hoopImage.naturalWidth, rimSourceHeight, left, top + height * .27, width, height * .12)
       ctx.translate(hoop.x, hoop.y)
       const punch = hoop.netPunch ?? 0
       const stretch = 1 + Math.sin((1 - punch) * Math.PI * 4 + .7) * punch * .18
       ctx.transform(1, 0, (hoop.netSwing ?? 0) / Math.max(1, height), stretch, 0, 0)
       ctx.translate(-hoop.x, -hoop.y)
-      ctx.drawImage(this.hoopImage, 0, netSourceY, this.hoopImage.naturalWidth, this.hoopImage.naturalHeight - netSourceY, left, top + height * .22, width, height * .78)
+      ctx.drawImage(this.hoopImage, 0, netSourceY, this.hoopImage.naturalWidth, this.hoopImage.naturalHeight - netSourceY, left, top + height * .39, width, height * .61)
     }
     ctx.restore()
   }
@@ -574,6 +574,7 @@ class LoopHoopsController extends BaseController {
       this.ball.x = clamp(this.ball.x, this.ball.r, this.w - this.ball.r); this.ball.vx *= -.76; this.touchedSurface = true; this.options.onImpact('tap')
     }
 
+    this.collideWithRimUnderside(previous)
     this.collideWithBackboard(previous)
     this.collideWithRim(previous)
     const rimHalf = 36
@@ -633,6 +634,18 @@ class LoopHoopsController extends BaseController {
       this.ball.vx *= .96; this.ball.vy *= .96
       this.stabilizeBallAfterImpact()
     }
+  }
+  private collideWithRimUnderside(previous: Point) {
+    if (this.ball.collisionCooldown > 0 || this.ball.vy >= 0) return
+    const rimHalf = 36, undersideY = this.target.y + 6
+    const crossedUnderside = previous.y - this.ball.r >= undersideY && this.ball.y - this.ball.r < undersideY
+    const beneathRim = Math.abs(this.ball.x - this.target.x) <= rimHalf + this.ball.r * .35
+    if (!crossedUnderside || !beneathRim) return
+
+    this.ball.y = undersideY + this.ball.r + .5
+    this.ball.vy = Math.max(180, Math.abs(this.ball.vy) * .64)
+    this.ball.vx *= .94
+    this.stabilizeBallAfterImpact()
   }
   private collideWithRim(previous: Point) {
     if (this.ball.collisionCooldown > 0) return

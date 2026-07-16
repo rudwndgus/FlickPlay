@@ -107,4 +107,19 @@ describe('Loop Hoops physics', () => {
     expect(controller.rimHits).toBe(1)
     expect(Math.hypot(controller.ball.vx, controller.ball.vy)).toBeLessThanOrEqual(Math.hypot(velocityAfterHit.x, velocityAfterHit.y) + 20)
   })
+
+  it('blocks the ball from passing upward through the rim underside', () => {
+    const { controller } = makeController()
+    const undersideY = controller.target.y + 6
+    controller.ball.x = controller.target.x
+    controller.ball.y = undersideY + controller.ball.r + 5
+    controller.ball.vx = 35; controller.ball.vy = -620; controller.ball.collisionCooldown = 0
+
+    controller.update(.03)
+
+    expect(controller.rimHits).toBe(1)
+    expect(controller.ball.y).toBeGreaterThanOrEqual(undersideY + controller.ball.r)
+    expect(controller.ball.vy).toBeGreaterThan(0)
+    expect(Math.hypot(controller.ball.vx, controller.ball.vy)).toBeLessThanOrEqual(860)
+  })
 })
