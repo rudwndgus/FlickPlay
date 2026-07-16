@@ -367,16 +367,17 @@ class DunkClimbController extends BaseController {
       return
     }
     if (!this.ball.flying) return
-    const lastY = this.ball.y
+    const lastPoint = { x: this.ball.x, y: this.ball.y }
     this.ball.vy += this.gravity * dt; this.ball.x += this.ball.vx * dt; this.ball.y += this.ball.vy * dt
     this.ball.rotation += dt * (4 + Math.abs(this.ball.vx) * .009)
     this.trail.unshift({ x: this.ball.x, y: this.ball.y, life: .38 }); if (this.trail.length > 14) this.trail.pop()
     if (this.ball.x < this.ball.r || this.ball.x > this.w - this.ball.r) {
       this.ball.x = clamp(this.ball.x, this.ball.r, this.w - this.ball.r); this.ball.vx *= -.76; this.wallBounces++; this.options.onImpact('tap')
     }
-    this.collideWithRims(this.launchHoop); this.collideWithRims(this.targetHoop)
-    const insideOpening = Math.abs(this.ball.x - this.targetHoop.x) < this.hoopWidth() * .36
-    if (!this.targetHoop.passed && lastY <= this.targetHoop.y && this.ball.y > this.targetHoop.y && this.ball.vy > 0 && insideOpening) {
+    const launchRim = this.getRimGeometry(this.launchHoop), targetRim = this.getRimGeometry(this.targetHoop)
+    this.collideWithRims(this.launchHoop, launchRim); this.collideWithRims(this.targetHoop, targetRim)
+    const insideOpening = this.isInsideRimOpening(this.ball, targetRim)
+    if (!this.targetHoop.passed && this.crossedRimPlane(lastPoint, this.ball, targetRim) && this.ball.vy > 0 && insideOpening) {
       this.targetHoop.passed = true; this.targetHoop.pulse = 1; this.targetHoop.netPunch = 1
       this.targetHoop.netSwing = clamp((this.ball.x - this.targetHoop.x) * .7, -18, 18)
       const clean = this.rimHits === 0
@@ -388,7 +389,7 @@ class DunkClimbController extends BaseController {
       this.setScore(this.score + points); this.options.onImpact(points > 1 ? 'perfect' : 'score')
       this.scoreEffect = 1; this.transitionDelay = .34; this.ball.flying = false
     }
-    const returnedToLaunch = !this.targetHoop.passed && lastY <= this.launchHoop.y && this.ball.y > this.launchHoop.y && this.ball.vy > 0 && Math.abs(this.ball.x - this.launchHoop.x) < this.hoopWidth() * .25
+    const returnedToLaunch = !this.targetHoop.passed && this.crossedRimPlane(lastPoint, this.ball, launchRim) && this.ball.vy > 0 && this.isInsideRimOpening(this.ball, launchRim)
     if (returnedToLaunch) {
       this.launchHoop.netPunch = 1; this.launchHoop.netSwing = clamp((this.ball.x - this.launchHoop.x) * .7, -18, 18)
       this.ball.flying = false; this.rescueDelay = .38; this.rescueEffect = 1; this.options.onImpact('perfect')
@@ -418,11 +419,44 @@ class DunkClimbController extends BaseController {
     this.wallBounces = 0; this.rimHits = 0; this.trail = []; this.climbRemaining = 0
   }
   private hoopWidth() { return Math.min(112, this.w * .29) }
-  private collideWithRims(hoop: Hoop) {
+  private getHoopPose(hoop: Hoop) {
+    const direction = hoop === this.launchHoop ? Math.sign(this.targetHoop.x - hoop.x) || (hoop.x < this.w * .5 ? -1 : 1) : Math.sign(hoop.x - this.w * .5) || 1
+    let angle = direction * .055 + (hoop.netSwing ?? 0) * .012
+    let stretch = 1 + Math.sin((hoop.netPunch ?? 0) * Math.PI) * (hoop.netPunch ?? 0) * .12
+    let followX = 0, followY = 0
+    if (hoop === this.launchHoop && this.dragStart && this.dragPoint) {
+      const pullX = this.dragPoint.x - this.dragStart.x, pullY = this.dragPoint.y - this.dragStart.y
+      const pullLength = Math.hypot(pullX, pullY)
+      angle = clamp(Math.atan2(pullY, pullX) - Math.PI * .5, -.58, .58)
+      stretch = 1 + clamp(pullLength / 150, 0, 1) * .4
+      followX = pullX * .2; followY = pullY * .12
+    }
+    return { direction, angle, stretch, followX, followY }
+  }
+  private getRimGeometry(hoop: Hoop) {
+    const size = this.hoopWidth(), pose = this.getHoopPose(hoop)
+    const transform = (x: number, y: number) => {
+      const sx = x * pose.direction, sy = y * pose.stretch
+      return { x: hoop.x + pose.followX + sx * Math.cos(pose.angle) - sy * Math.sin(pose.angle), y: hoop.y + pose.followY + sx * Math.sin(pose.angle) + sy * Math.cos(pose.angle) }
+    }
+    const first = transform(-size * .3, -size * .08), second = transform(size * .3, size * .05)
+    return first.x <= second.x ? { left: first, right: second, tubeRadius: size * .027 } : { left: second, right: first, tubeRadius: size * .027 }
+  }
+  private crossedRimPlane(previous: Point, current: Point, rim: ReturnType<DunkClimbController['getRimGeometry']>) {
+    const dx = rim.right.x - rim.left.x, dy = rim.right.y - rim.left.y
+    const side = (point: Point) => dx * (point.y - rim.left.y) - dy * (point.x - rim.left.x)
+    return side(previous) <= 0 && side(current) > 0
+  }
+  private isInsideRimOpening(point: Point, rim: ReturnType<DunkClimbController['getRimGeometry']>) {
+    const dx = rim.right.x - rim.left.x, dy = rim.right.y - rim.left.y, length = Math.hypot(dx, dy)
+    const centerX = (rim.left.x + rim.right.x) * .5, centerY = (rim.left.y + rim.right.y) * .5
+    const along = Math.abs((point.x - centerX) * dx / length + (point.y - centerY) * dy / length)
+    return along < length * .5 - this.ball.r * .6
+  }
+  private collideWithRims(hoop: Hoop, rim = this.getRimGeometry(hoop)) {
     if (this.ball.collisionCooldown > 0) return
-    const rimHalf = this.hoopWidth() * .34
-    for (const postX of [hoop.x - rimHalf, hoop.x + rimHalf]) {
-      const dx = this.ball.x - postX, dy = this.ball.y - hoop.y, length = Math.hypot(dx, dy), minDistance = this.ball.r + 5
+    for (const post of [rim.left, rim.right]) {
+      const dx = this.ball.x - post.x, dy = this.ball.y - post.y, length = Math.hypot(dx, dy), minDistance = this.ball.r + rim.tubeRadius
       if (length === 0 || length >= minDistance) continue
       const nx = dx / length, ny = dy / length, overlap = minDistance - length
       this.ball.x += nx * overlap; this.ball.y += ny * overlap
@@ -445,18 +479,8 @@ class DunkClimbController extends BaseController {
   }
   private drawHoopLayer(ctx: CanvasRenderingContext2D, hoop: Hoop, foreground: boolean) {
     if (!this.hoopImage.complete || !this.hoopImage.naturalWidth) return
-    const size = this.hoopWidth(), left = hoop.x - size * .5, top = hoop.y - size * .33
-    const direction = hoop === this.launchHoop ? Math.sign(this.targetHoop.x - hoop.x) || (hoop.x < this.w * .5 ? -1 : 1) : Math.sign(hoop.x - this.w * .5) || 1
-    let angle = direction * .055 + (hoop.netSwing ?? 0) * .012
-    let stretch = 1 + Math.sin((hoop.netPunch ?? 0) * Math.PI) * (hoop.netPunch ?? 0) * .12
-    let followX = 0, followY = 0
-    if (hoop === this.launchHoop && this.dragStart && this.dragPoint) {
-      const pullX = this.dragPoint.x - this.dragStart.x, pullY = this.dragPoint.y - this.dragStart.y
-      const pullLength = Math.hypot(pullX, pullY)
-      angle = clamp(Math.atan2(pullY, pullX) - Math.PI * .5, -.58, .58)
-      stretch = 1 + clamp(pullLength / 150, 0, 1) * .4
-      followX = pullX * .2; followY = pullY * .12
-    }
+    const size = this.hoopWidth(), left = hoop.x - size * .53, top = hoop.y - size * .32
+    const { direction, angle, stretch, followX, followY } = this.getHoopPose(hoop)
     ctx.save()
     if (hoop.pulse > 0) { ctx.shadowColor = '#ffb52e'; ctx.shadowBlur = 30 * hoop.pulse }
     ctx.translate(hoop.x + followX, hoop.y + followY); ctx.rotate(angle); ctx.scale(direction, stretch); ctx.translate(-hoop.x, -hoop.y)

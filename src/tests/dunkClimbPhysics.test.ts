@@ -3,7 +3,7 @@ import { gameRegistry } from '../games/registry'
 import type { GameController } from '../games/types'
 
 type DunkController = GameController & {
-  ball: { x: number; y: number; vx: number; vy: number; flying: boolean }
+  ball: { x: number; y: number; vx: number; vy: number; r: number; flying: boolean; collisionCooldown: number }
   launchHoop: { x: number; y: number; netPunch?: number }
   targetHoop: { x: number; y: number; passed: boolean; netPunch?: number }
   dragStart: { x: number; y: number } | null
@@ -14,6 +14,8 @@ type DunkController = GameController & {
   wallBounces: number
   rimHits: number
   scoreLabel: string
+  getRimGeometry: (hoop: DunkController['targetHoop']) => { left: { x: number; y: number }; right: { x: number; y: number }; tubeRadius: number }
+  collideWithRims: (hoop: DunkController['targetHoop']) => void
 }
 
 const makeController = () => {
@@ -111,6 +113,24 @@ describe('Dunk Climb physics', () => {
 
     expect(controller.getScore()).toBe(2)
     expect(controller.scoreLabel).toBe('BANK SHOT  +2')
+  })
+
+  it('matches rim collisions to the visible sprite endpoints and thickness', () => {
+    const { controller } = makeController()
+    const rim = controller.getRimGeometry(controller.targetHoop)
+    const rimSpan = Math.hypot(rim.right.x - rim.left.x, rim.right.y - rim.left.y)
+    expect(rimSpan).toBeCloseTo(112 * Math.hypot(.6, .13), 4)
+    expect(rim.tubeRadius).toBeCloseTo(112 * .027, 4)
+
+    controller.ball.x = rim.left.x - controller.ball.r - rim.tubeRadius - 1
+    controller.ball.y = rim.left.y
+    controller.ball.vx = 300; controller.ball.vy = 0; controller.ball.collisionCooldown = 0
+    controller.collideWithRims(controller.targetHoop)
+    expect(controller.ball.vx).toBe(300)
+
+    controller.ball.x += 2
+    controller.collideWithRims(controller.targetHoop)
+    expect(controller.ball.vx).toBeLessThan(0)
   })
 
   it('saves a missed shot that falls back through the launch hoop', () => {
