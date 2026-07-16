@@ -3,7 +3,7 @@ import { gameRegistry } from '../games/registry'
 import type { GameController } from '../games/types'
 
 type LoopController = GameController & {
-  ball: { x: number; y: number; vx: number; vy: number; r: number; kick: number }
+  ball: { x: number; y: number; vx: number; vy: number; r: number; kick: number; collisionCooldown: number }
   target: { side: -1 | 1; x: number; y: number; pulse: number; netPunch: number }
   timeLeft: number
   cleanStreak: number
@@ -73,5 +73,38 @@ describe('Loop Hoops physics', () => {
 
     expect(controller.cleanStreak).toBe(3)
     expect(controller.getScore()).toBe(6)
+  })
+
+  it('reflects cleanly from the visible backboard face', () => {
+    const { controller } = makeController()
+    const size = Math.min(190, 390 * .49)
+    const boardCenter = controller.target.x + controller.target.side * size * .29
+    const innerFace = boardCenter - controller.target.side * size * .025
+    controller.ball.x = innerFace + controller.ball.r + 4
+    controller.ball.y = controller.target.y - 55
+    controller.ball.vx = -320; controller.ball.vy = 0; controller.ball.collisionCooldown = 0
+
+    controller.update(.03)
+
+    expect(controller.ball.vx).toBeGreaterThan(0)
+    expect(controller.ball.x).toBeGreaterThanOrEqual(innerFace + controller.ball.r)
+    expect(Math.hypot(controller.ball.vx, controller.ball.vy)).toBeLessThanOrEqual(860)
+  })
+
+  it('catches high-speed rim impacts without unstable repeated acceleration', () => {
+    const { controller } = makeController()
+    controller.ball.x = controller.target.x + 36
+    controller.ball.y = controller.target.y - 42
+    controller.ball.vx = 0; controller.ball.vy = 900; controller.ball.collisionCooldown = 0
+
+    controller.update(.03)
+
+    expect(controller.rimHits).toBe(1)
+    expect(controller.ball.vy).toBeLessThan(0)
+    expect(Math.hypot(controller.ball.vx, controller.ball.vy)).toBeLessThanOrEqual(860)
+    const velocityAfterHit = { x: controller.ball.vx, y: controller.ball.vy }
+    controller.update(1 / 120)
+    expect(controller.rimHits).toBe(1)
+    expect(Math.hypot(controller.ball.vx, controller.ball.vy)).toBeLessThanOrEqual(Math.hypot(velocityAfterHit.x, velocityAfterHit.y) + 20)
   })
 })

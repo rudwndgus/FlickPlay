@@ -552,7 +552,7 @@ class LoopHoopsController extends BaseController {
     this.timeLeft = Math.max(0, this.timeLeft - drainRate * dt)
     if (this.timeLeft <= 0) { this.finish(); return }
 
-    const previousY = this.ball.y
+    const previous = { x: this.ball.x, y: this.ball.y }
     this.ball.vy = Math.min(900, this.ball.vy + 1850 * dt)
     this.ball.x += this.ball.vx * dt; this.ball.y += this.ball.vy * dt
     this.ball.rotation += dt * (4 + Math.abs(this.ball.vx) * .012)
@@ -574,10 +574,11 @@ class LoopHoopsController extends BaseController {
       this.ball.x = clamp(this.ball.x, this.ball.r, this.w - this.ball.r); this.ball.vx *= -.76; this.touchedSurface = true; this.options.onImpact('tap')
     }
 
-    this.collideWithRim()
+    this.collideWithBackboard(previous)
+    this.collideWithRim(previous)
     const rimHalf = 36
     const insideOpening = Math.abs(this.ball.x - this.target.x) < rimHalf - this.ball.r * .35
-    if (previousY <= this.target.y && this.ball.y > this.target.y && this.ball.vy > 0 && insideOpening) this.scoreGoal()
+    if (previous.y <= this.target.y && this.ball.y > this.target.y && this.ball.vy > 0 && insideOpening) this.scoreGoal()
   }
   render(ctx: CanvasRenderingContext2D) {
     const backdrop = ctx.createRadialGradient(this.w * .5, this.h * .48, 40, this.w * .5, this.h * .48, this.h * .72)
@@ -607,18 +608,67 @@ class LoopHoopsController extends BaseController {
     this.ball.vx = this.target.side * Math.min(245, 178 + this.score * 2.5)
     this.rimHits = 0; this.touchedSurface = false
   }
-  private collideWithRim() {
+  private collideWithBackboard(previous: Point) {
+    if (this.ball.collisionCooldown > 0) return
+    const size = Math.min(190, this.w * .49)
+    const centerX = this.target.x + this.target.side * size * .29
+    const halfWidth = size * .025, top = this.target.y - size * .48, bottom = this.target.y + size * .25
+    const closestX = clamp(this.ball.x, centerX - halfWidth, centerX + halfWidth)
+    const closestY = clamp(this.ball.y, top, bottom)
+    const dx = this.ball.x - closestX, dy = this.ball.y - closestY
+    const distanceToBoard = Math.hypot(dx, dy)
+    const innerFace = centerX - this.target.side * halfWidth
+    const crossedInnerFace = this.target.side < 0
+      ? previous.x - this.ball.r >= innerFace && this.ball.x - this.ball.r < innerFace
+      : previous.x + this.ball.r <= innerFace && this.ball.x + this.ball.r > innerFace
+    const withinFace = this.ball.y >= top - this.ball.r && this.ball.y <= bottom + this.ball.r
+    if (!crossedInnerFace && (distanceToBoard <= 0 || distanceToBoard >= this.ball.r)) return
+
+    let nx = dx / Math.max(.001, distanceToBoard), ny = dy / Math.max(.001, distanceToBoard)
+    if (crossedInnerFace && withinFace) { nx = -this.target.side; ny = 0; this.ball.x = innerFace + nx * (this.ball.r + .5) }
+    else { const overlap = this.ball.r - distanceToBoard + .5; this.ball.x += nx * overlap; this.ball.y += ny * overlap }
+    const impact = this.ball.vx * nx + this.ball.vy * ny
+    if (impact < 0) {
+      this.ball.vx -= 1.68 * impact * nx; this.ball.vy -= 1.68 * impact * ny
+      this.ball.vx *= .96; this.ball.vy *= .96
+      this.stabilizeBallAfterImpact()
+    }
+  }
+  private collideWithRim(previous: Point) {
     if (this.ball.collisionCooldown > 0) return
     const rimHalf = 36
     for (const x of [this.target.x - rimHalf, this.target.x + rimHalf]) {
-      const dx = this.ball.x - x, dy = this.ball.y - this.target.y, distanceToRim = Math.hypot(dx, dy), minDistance = this.ball.r + 4
-      if (distanceToRim === 0 || distanceToRim >= minDistance) continue
-      const nx = dx / distanceToRim, ny = dy / distanceToRim, overlap = minDistance - distanceToRim
-      this.ball.x += nx * overlap; this.ball.y += ny * overlap
+      const radius = this.ball.r + 4
+      const moveX = this.ball.x - previous.x, moveY = this.ball.y - previous.y
+      const fromX = previous.x - x, fromY = previous.y - this.target.y
+      const a = moveX * moveX + moveY * moveY
+      const b = 2 * (fromX * moveX + fromY * moveY)
+      const c = fromX * fromX + fromY * fromY - radius * radius
+      const discriminant = b * b - 4 * a * c
+      let hitTime: number | null = null
+      if (a > .0001 && discriminant >= 0) {
+        const root = Math.sqrt(discriminant), first = (-b - root) / (2 * a), second = (-b + root) / (2 * a)
+        if (first >= 0 && first <= 1) hitTime = first
+        else if (second >= 0 && second <= 1) hitTime = second
+      }
+      const currentDx = this.ball.x - x, currentDy = this.ball.y - this.target.y, currentDistance = Math.hypot(currentDx, currentDy)
+      if (hitTime === null && currentDistance >= radius) continue
+      if (hitTime !== null) { this.ball.x = previous.x + moveX * hitTime; this.ball.y = previous.y + moveY * hitTime }
+      const dx = this.ball.x - x, dy = this.ball.y - this.target.y, distanceToRim = Math.max(.001, Math.hypot(dx, dy))
+      const nx = dx / distanceToRim, ny = dy / distanceToRim
+      this.ball.x = x + nx * (radius + .5); this.ball.y = this.target.y + ny * (radius + .5)
       const impact = this.ball.vx * nx + this.ball.vy * ny
-      if (impact < 0) { this.ball.vx -= 1.7 * impact * nx; this.ball.vy -= 1.7 * impact * ny }
-      this.ball.collisionCooldown = .065; this.rimHits++; this.cleanStreak = 0; this.options.onImpact('tap'); return
+      if (impact < 0) {
+        this.ball.vx -= 1.7 * impact * nx; this.ball.vy -= 1.7 * impact * ny
+        this.ball.vx *= .96; this.ball.vy *= .96
+      }
+      this.stabilizeBallAfterImpact(); return
     }
+  }
+  private stabilizeBallAfterImpact() {
+    const speed = Math.hypot(this.ball.vx, this.ball.vy), maxSpeed = 860
+    if (speed > maxSpeed) { this.ball.vx *= maxSpeed / speed; this.ball.vy *= maxSpeed / speed }
+    this.ball.collisionCooldown = .085; this.rimHits++; this.cleanStreak = 0; this.touchedSurface = true; this.ball.kick = Math.max(this.ball.kick, .4); this.options.onImpact('tap')
   }
   private drawTimer(ctx: CanvasRenderingContext2D) {
     const x = 58, y = 98, width = this.w - 116, height = 25
