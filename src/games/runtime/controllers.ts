@@ -56,17 +56,23 @@ abstract class BaseController implements GameController {
 type Hoop = { x: number; y: number; passed: boolean; pulse: number }
 
 class HoopFlightController extends BaseController {
-  private ball = { x: 110, y: 400, vy: 0, r: 20, rotation: 0, kick: 0 }
+  private ball = { x: 110, y: 400, vx: 0, vy: 0, r: 20, rotation: 0, kick: 0, collisionCooldown: 0 }
   private hoops: Hoop[] = []
   private speed = 138
   private autoClock = 0
+  private readonly hoopImage: HTMLImageElement
 
   reset() {
-    this.ball = { x: this.w * .27, y: this.h * .48, vy: 50, r: 20, rotation: -.15, kick: 0 }
+    this.ball = { x: this.w * .27, y: this.h * .48, vx: 0, vy: 50, r: 20, rotation: -.15, kick: 0, collisionCooldown: 0 }
     this.speed = 138; this.autoClock = 0
     this.hoops = [0, 1, 2].map((i) => ({ x: this.w * .86 + i * 255, y: random(this.h * .3, this.h * .67), passed: false, pulse: 0 }))
   }
-  constructor(theme: GameTheme, options: ControllerOptions) { super(theme, options); this.reset() }
+  constructor(theme: GameTheme, options: ControllerOptions) {
+    super(theme, options)
+    this.hoopImage = new Image()
+    this.hoopImage.src = `${import.meta.env.BASE_URL}games/hoop-flight/hoop.png`
+    this.reset()
+  }
   pointerDown() {
     if (this.status === 'finished') return
     // A short positional kick plus a strong, short-lived impulse makes every tap
@@ -82,25 +88,35 @@ class HoopFlightController extends BaseController {
     if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .42) { this.autoClock = 0; this.autopilot() } }
     const previousY = this.ball.y
     this.ball.vy = Math.min(760, this.ball.vy + 1850 * dt)
+    const anchorX = this.w * .27
+    this.ball.vx += (anchorX - this.ball.x) * 11 * dt
+    this.ball.vx *= Math.pow(.16, dt)
+    this.ball.x += this.ball.vx * dt
     this.ball.y += this.ball.vy * dt
     this.ball.kick = Math.max(0, this.ball.kick - dt * 7.5)
+    this.ball.collisionCooldown = Math.max(0, this.ball.collisionCooldown - dt)
     this.ball.rotation += dt * (2.4 + Math.abs(this.ball.vy) * .002)
     this.speed = Math.min(235, 138 + this.elapsed * 1.65)
     for (const hoop of this.hoops) {
       hoop.x -= this.speed * dt; hoop.pulse = Math.max(0, hoop.pulse - dt)
-      if (!hoop.passed && hoop.x < this.ball.x + 6) {
+      const metrics = this.getHoopMetrics(hoop)
+      this.collideWithHoop(metrics)
+      const insideOpening = Math.abs(this.ball.x - hoop.x) < metrics.rimHalf - this.ball.r * .42
+      if (!hoop.passed && insideOpening && previousY < hoop.y - 3 && this.ball.y >= hoop.y + 9 && this.ball.vy > 0) {
+        hoop.passed = true; hoop.pulse = 1
+        const clean = Math.abs(this.ball.x - hoop.x) < metrics.rimHalf * .42
+        this.addScore(clean ? (this.score > 1 ? 2 : 1) : 1)
+      } else if (!hoop.passed && hoop.x + metrics.rimHalf < this.ball.x - this.ball.r) {
         hoop.passed = true
-        const clean = Math.abs(this.ball.y - hoop.y) < 25 && this.ball.vy > -80
-        if (clean) { hoop.pulse = 1; this.addScore(this.score > 1 ? 2 : 1) }
       }
-      if (!hoop.passed && Math.abs(hoop.x - this.ball.x) < 26 && previousY < hoop.y - 8 && this.ball.y > hoop.y + 14) {
-        hoop.passed = true; hoop.pulse = 1; this.addScore(2)
+      if (insideOpening && this.ball.y > hoop.y + 5 && this.ball.y < hoop.y + metrics.height * .68) {
+        this.ball.vx *= Math.pow(.55, dt)
       }
     }
     const last = this.hoops[this.hoops.length - 1]
     if (last.x < this.w - 180) this.hoops.push({ x: last.x + random(220, 295), y: random(this.h * .25, this.h * .68), passed: false, pulse: 0 })
     this.hoops = this.hoops.filter((hoop) => hoop.x > -100)
-    if (this.ball.y > this.h - 75 || this.ball.y < 42) this.finish()
+    if (this.ball.y > this.h - 75 || this.ball.y < 42 || this.ball.x < -45) this.finish()
   }
   render(ctx: CanvasRenderingContext2D) {
     const paper = ctx.createLinearGradient(0, 0, 0, this.h)
@@ -110,8 +126,9 @@ class HoopFlightController extends BaseController {
     ctx.fillStyle = '#15130f'; ctx.fillRect(0, 76, this.w, 9); ctx.fillRect(0, this.h - 71, this.w, 10)
     ctx.fillStyle = '#f2bd3f'; ctx.fillRect(0, this.h - 61, this.w, 61)
     ctx.fillStyle = 'rgba(82,72,54,.3)'; ctx.font = `900 ${Math.min(88, this.w * .2)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(this.score), this.w * .55, this.h * .52)
-    for (const hoop of this.hoops) this.drawHoop(ctx, hoop)
-    drawWingedBasketball(ctx, this.ball.x, this.ball.y, this.ball.r, this.ball.rotation, this.ball.kick, this.elapsed, this.score >= 4)
+    for (const hoop of this.hoops) this.drawHoopLayer(ctx, hoop, false)
+    ctx.save(); ctx.translate(this.ball.x, this.ball.y); ctx.scale(1 + this.ball.kick * .16, 1 - this.ball.kick * .1); drawBasketball(ctx, 0, 0, this.ball.r, this.ball.rotation, this.score >= 4); ctx.restore()
+    for (const hoop of this.hoops) this.drawHoopLayer(ctx, hoop, true)
     drawGameLabel(ctx, 'TAP TO BOUNCE', `${Math.floor(this.elapsed * 10)}m`, this.w, this.h)
   }
   private drawPaperWall(ctx: CanvasRenderingContext2D) {
@@ -129,14 +146,57 @@ class HoopFlightController extends BaseController {
     for (let i = 0; i < 90; i++) ctx.fillRect((i * 47) % this.w, (i * 97) % this.h, 2, 2)
     ctx.restore()
   }
-  private drawHoop(ctx: CanvasRenderingContext2D, hoop: Hoop) {
-    ctx.save(); if (hoop.pulse > 0) { ctx.shadowColor = '#fff27b'; ctx.shadowBlur = 36 }
-    ctx.strokeStyle = '#1c1914'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(hoop.x + 47, hoop.y - 56); ctx.lineTo(hoop.x + 47, hoop.y + 21); ctx.stroke()
-    ctx.strokeStyle = '#f4efe1'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(hoop.x + 47, hoop.y - 54); ctx.lineTo(hoop.x + 47, hoop.y + 18); ctx.stroke()
-    ctx.strokeStyle = '#3a1712'; ctx.lineWidth = 12; ctx.beginPath(); ctx.ellipse(hoop.x, hoop.y, 43, 10, 0, 0, Math.PI * 2); ctx.stroke()
-    ctx.strokeStyle = '#ed4631'; ctx.lineWidth = 8; ctx.beginPath(); ctx.ellipse(hoop.x, hoop.y, 43, 10, 0, 0, Math.PI * 2); ctx.stroke()
-    ctx.strokeStyle = 'rgba(46,32,25,.58)'; ctx.lineWidth = 1.8
-    for (let i = -30; i <= 30; i += 12) { ctx.beginPath(); ctx.moveTo(hoop.x + i, hoop.y + 7); ctx.lineTo(hoop.x + i * .55, hoop.y + 41); ctx.stroke() }
+  private getHoopMetrics(hoop: Hoop) {
+    const width = Math.min(194, this.w * .48)
+    const height = width * (579 / 720)
+    const left = hoop.x - width * .365
+    const top = hoop.y - height * .345
+    return { hoop, width, height, left, top, rimHalf: width * .33, boardLeft: left + width * .79, boardRight: left + width * .96, boardTop: top + height * .02, boardBottom: top + height * .78 }
+  }
+  private collideWithHoop(metrics: ReturnType<HoopFlightController['getHoopMetrics']>) {
+    if (this.ball.collisionCooldown > 0) return
+    const boardHit = this.ball.x + this.ball.r > metrics.boardLeft && this.ball.x - this.ball.r < metrics.boardRight && this.ball.y + this.ball.r > metrics.boardTop && this.ball.y - this.ball.r < metrics.boardBottom
+    if (boardHit) {
+      this.ball.x = metrics.boardLeft - this.ball.r - 1
+      this.ball.vx = -Math.max(245, Math.abs(this.ball.vx) * .72 + 120)
+      this.ball.vy *= .72
+      this.registerHoopImpact(); return
+    }
+    const posts = [metrics.hoop.x - metrics.rimHalf, metrics.hoop.x + metrics.rimHalf]
+    for (const postX of posts) {
+      const dx = this.ball.x - postX, dy = this.ball.y - metrics.hoop.y
+      const minDistance = this.ball.r + 6, length = Math.hypot(dx, dy)
+      if (length >= minDistance || length === 0) continue
+      const nx = dx / length, ny = dy / length, overlap = minDistance - length
+      this.ball.x += nx * overlap; this.ball.y += ny * overlap
+      const relativeX = this.ball.vx + this.speed
+      const alongNormal = relativeX * nx + this.ball.vy * ny
+      if (alongNormal < 0) {
+        const bounce = 1.68 * alongNormal
+        this.ball.vx = relativeX - bounce * nx - this.speed
+        this.ball.vy -= bounce * ny
+      }
+      this.ball.vx = Math.min(this.ball.vx, -155)
+      this.registerHoopImpact(); return
+    }
+  }
+  private registerHoopImpact() {
+    this.ball.collisionCooldown = .075
+    this.ball.kick = Math.max(this.ball.kick, .5)
+    this.options.onImpact('tap')
+  }
+  private drawHoopLayer(ctx: CanvasRenderingContext2D, hoop: Hoop, foreground: boolean) {
+    if (!this.hoopImage.complete || !this.hoopImage.naturalWidth) return
+    const { width, height, left, top } = this.getHoopMetrics(hoop)
+    ctx.save()
+    if (hoop.pulse > 0) { ctx.shadowColor = '#fff27b'; ctx.shadowBlur = 34 * hoop.pulse }
+    if (!foreground) {
+      ctx.drawImage(this.hoopImage, left, top, width, height)
+    } else {
+      const sourceY = this.hoopImage.naturalHeight * .31
+      const sourceHeight = this.hoopImage.naturalHeight - sourceY
+      ctx.drawImage(this.hoopImage, 0, sourceY, this.hoopImage.naturalWidth, sourceHeight, left, top + height * .31, width, height * .69)
+    }
     ctx.restore()
   }
 }
@@ -409,19 +469,6 @@ class PocketGolfController extends BaseController {
     ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 10; ctx.beginPath(); ctx.arc(this.ball.x, this.ball.y, this.ball.r, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0
     drawGameLabel(ctx, 'PULL • AIM • RELEASE', `${this.score} holes  ·  ${this.strokes} shots`, this.w, this.h)
   }
-}
-
-const drawWingedBasketball = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rotation: number, kick: number, elapsed: number, fire: boolean) => {
-  const flap = Math.sin(elapsed * 15) * .13 - kick * .28
-  ctx.save(); ctx.translate(x, y)
-  ctx.save(); ctx.translate(-r * .65, r * .1); ctx.rotate(-.38 + flap); ctx.fillStyle = '#fffdf5'; ctx.strokeStyle = '#211b16'; ctx.lineWidth = 2.5
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(-9, -11, -21, -9, -20, 2); ctx.bezierCurveTo(-29, -1, -31, 10, -18, 12); ctx.bezierCurveTo(-22, 19, -10, 24, -3, 13); ctx.closePath(); ctx.fill(); ctx.stroke()
-  ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(-3, 4); ctx.lineTo(-19, 3); ctx.moveTo(-4, 8); ctx.lineTo(-18, 11); ctx.moveTo(-3, 11); ctx.lineTo(-10, 18); ctx.stroke(); ctx.restore()
-  ctx.save(); ctx.translate(r * .72, r * .05); ctx.scale(-.72, .72); ctx.rotate(-.25 + flap); ctx.fillStyle = '#fffdf5'; ctx.strokeStyle = '#211b16'; ctx.lineWidth = 2.5
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(-9, -11, -21, -9, -20, 2); ctx.bezierCurveTo(-29, -1, -31, 10, -18, 12); ctx.bezierCurveTo(-22, 19, -10, 24, -3, 13); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore()
-  ctx.scale(1 + kick * .16, 1 - kick * .1)
-  drawBasketball(ctx, 0, 0, r, rotation, fire)
-  ctx.restore()
 }
 
 const drawBasketball = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rotation: number, fire: boolean) => {
