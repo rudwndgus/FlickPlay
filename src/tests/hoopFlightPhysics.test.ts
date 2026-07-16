@@ -55,6 +55,21 @@ describe('Hoop Flight physics', () => {
     expect(controller.captureTime).toBeGreaterThan(0)
   })
 
+  it('does not miss a score when the ball crosses the rim over several 120Hz frames', () => {
+    const { controller } = makeController()
+    const hoop = { x: 275, y: 370, passed: false, pulse: 0, netPunch: 0 }
+    controller.hoops = [hoop]
+    controller.ball.x = hoop.x
+    controller.ball.y = hoop.y - 12
+    controller.ball.vx = 0
+    controller.ball.vy = 80
+
+    for (let frame = 0; frame < 20 && controller.getScore() === 0; frame++) controller.update(1 / 120)
+
+    expect(controller.getScore()).toBe(1)
+    expect(hoop.passed).toBe(true)
+  })
+
   it('escalates consecutive clean shots into combo effects', () => {
     const { controller } = makeController()
     for (let shot = 0; shot < 3; shot++) {

@@ -126,8 +126,9 @@ class HoopFlightController extends BaseController {
       hoop.netPunch = Math.max(0, (hoop.netPunch ?? 0) - dt * 2.7)
       const metrics = this.getHoopMetrics(hoop)
       this.collideWithHoop(metrics)
-      const insideOpening = Math.abs(this.ball.x - hoop.x) < metrics.rimHalf - this.ball.r * .42
-      if (!hoop.passed && insideOpening && previousY < hoop.y - 3 && this.ball.y >= hoop.y + 9 && this.ball.vy > 0) {
+      const insideOpening = Math.abs(this.ball.x - hoop.x) < metrics.rimHalf - this.ball.r * .25
+      const crossedRimPlane = previousY <= hoop.y && this.ball.y > hoop.y
+      if (!hoop.passed && insideOpening && crossedRimPlane && this.ball.vy > 0) {
         hoop.passed = true; hoop.pulse = 1
         const clean = Math.abs(this.ball.x - hoop.x) < metrics.rimHalf * .42
         this.cleanStreak = clean ? this.cleanStreak + 1 : 0
