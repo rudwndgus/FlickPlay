@@ -53,7 +53,7 @@ abstract class BaseController implements GameController {
   }
 }
 
-type Hoop = { x: number; y: number; passed: boolean; pulse: number; netSwing?: number; netVelocity?: number }
+type Hoop = { x: number; y: number; passed: boolean; pulse: number; netSwing?: number; netVelocity?: number; netPunch?: number }
 type HoopScoreEffect = { x: number; y: number; life: number; label: string; clean: boolean; streak: number }
 
 class HoopFlightController extends BaseController {
@@ -66,11 +66,13 @@ class HoopFlightController extends BaseController {
   private scoreEffects: HoopScoreEffect[] = []
   private scoreFlash = 0
   private fireBurst = 0
+  private capturedHoop: Hoop | null = null
+  private captureTime = 0
 
   reset() {
     this.ball = { x: this.w * .27, y: this.h * .48, vx: 0, vy: 50, r: 20, rotation: -.15, kick: 0, collisionCooldown: 0 }
-    this.speed = 138; this.autoClock = 0; this.cleanStreak = 0; this.scoreEffects = []; this.scoreFlash = 0; this.fireBurst = 0
-    this.hoops = [0, 1, 2].map((i) => ({ x: this.w * .86 + i * 255, y: random(this.h * .3, this.h * .67), passed: false, pulse: 0, netSwing: 0, netVelocity: 0 }))
+    this.speed = 138; this.autoClock = 0; this.cleanStreak = 0; this.scoreEffects = []; this.scoreFlash = 0; this.fireBurst = 0; this.capturedHoop = null; this.captureTime = 0
+    this.hoops = [0, 1, 2].map((i) => ({ x: this.w * .86 + i * 255, y: random(this.h * .3, this.h * .67), passed: false, pulse: 0, netSwing: 0, netVelocity: 0, netPunch: 0 }))
   }
   constructor(theme: GameTheme, options: ControllerOptions) {
     super(theme, options)
@@ -86,12 +88,22 @@ class HoopFlightController extends BaseController {
     this.ball.vy = -570
     this.ball.kick = 1
     this.ball.rotation -= .22
+    this.captureTime = 0
+    this.capturedHoop = null
     this.options.onImpact('tap')
   }
   autopilot() { if (this.ball.y > this.h * .47 || this.ball.vy > 210) this.pointerDown() }
   tick(dt: number) {
     if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .42) { this.autoClock = 0; this.autopilot() } }
     const previousY = this.ball.y
+    if (this.captureTime > 0 && this.capturedHoop) {
+      const pull = Math.min(1, dt * 15)
+      this.ball.x += (this.capturedHoop.x - this.ball.x) * pull
+      this.ball.vx *= Math.pow(.04, dt)
+      this.ball.vy += (330 - this.ball.vy) * Math.min(1, dt * 8)
+      this.captureTime -= dt
+      if (this.captureTime <= 0) this.capturedHoop = null
+    }
     this.ball.vy = Math.min(760, this.ball.vy + 1850 * dt)
     const anchorX = this.w * .27
     this.ball.vx += (anchorX - this.ball.x) * 11 * dt
@@ -111,6 +123,7 @@ class HoopFlightController extends BaseController {
       hoop.netVelocity = (hoop.netVelocity ?? 0) - (hoop.netSwing ?? 0) * 48 * dt
       hoop.netVelocity *= Math.pow(.018, dt)
       hoop.netSwing = (hoop.netSwing ?? 0) + hoop.netVelocity * dt
+      hoop.netPunch = Math.max(0, (hoop.netPunch ?? 0) - dt * 2.7)
       const metrics = this.getHoopMetrics(hoop)
       this.collideWithHoop(metrics)
       const insideOpening = Math.abs(this.ball.x - hoop.x) < metrics.rimHalf - this.ball.r * .42
@@ -122,9 +135,14 @@ class HoopFlightController extends BaseController {
         const label = clean ? (this.cleanStreak >= 3 ? `FIRE ×${this.cleanStreak}` : this.cleanStreak === 2 ? 'PERFECT ×2' : 'CLEAN!') : 'SWISH!'
         this.setScore(this.score + points)
         this.options.onImpact(clean ? 'perfect' : 'score')
-        hoop.netVelocity = clamp((this.ball.x - hoop.x) * 4.5 + 105, -150, 150)
+        hoop.netVelocity = clamp((this.ball.x - hoop.x) * 5.5 + 175, -220, 220)
+        hoop.netPunch = 1
+        this.capturedHoop = hoop
+        this.captureTime = .3
+        this.ball.vy = Math.min(this.ball.vy, 365)
+        this.ball.kick = Math.max(this.ball.kick, .72)
         this.scoreEffects.push({ x: hoop.x, y: hoop.y, life: 1, label, clean, streak: this.cleanStreak })
-        this.scoreFlash = clean ? .72 : .38
+        this.scoreFlash = clean ? .9 : .58
         if (this.cleanStreak >= 3) this.fireBurst = 1
       } else if (!hoop.passed && hoop.x + metrics.rimHalf < this.ball.x - this.ball.r) {
         hoop.passed = true
@@ -135,7 +153,7 @@ class HoopFlightController extends BaseController {
       }
     }
     const last = this.hoops[this.hoops.length - 1]
-    if (last.x < this.w - 180) this.hoops.push({ x: last.x + random(220, 295), y: random(this.h * .25, this.h * .68), passed: false, pulse: 0, netSwing: 0, netVelocity: 0 })
+    if (last.x < this.w - 180) this.hoops.push({ x: last.x + random(220, 295), y: random(this.h * .25, this.h * .68), passed: false, pulse: 0, netSwing: 0, netVelocity: 0, netPunch: 0 })
     this.hoops = this.hoops.filter((hoop) => hoop.x > -100)
     if (this.ball.y > this.h - 75 || this.ball.y < 42 || this.ball.x < -45) this.finish()
   }
@@ -171,7 +189,7 @@ class HoopFlightController extends BaseController {
     ctx.restore()
   }
   private getHoopMetrics(hoop: Hoop) {
-    const width = Math.min(138, this.w * .35)
+    const width = Math.min(104, this.w * .27)
     const height = width * (483 / 560)
     const left = hoop.x - width * .5
     const top = hoop.y - height * .135
@@ -216,7 +234,9 @@ class HoopFlightController extends BaseController {
       const rimSourceHeight = netSourceY - rimSourceY
       ctx.drawImage(this.hoopImage, 0, rimSourceY, this.hoopImage.naturalWidth, rimSourceHeight, left, top + height * .105, width, height * .115)
       ctx.translate(hoop.x, hoop.y)
-      ctx.transform(1, 0, (hoop.netSwing ?? 0) / Math.max(1, height), 1, 0, 0)
+      const punch = hoop.netPunch ?? 0
+      const stretch = 1 + Math.sin((1 - punch) * Math.PI * 4 + .7) * punch * .18
+      ctx.transform(1, 0, (hoop.netSwing ?? 0) / Math.max(1, height), stretch, 0, 0)
       ctx.translate(-hoop.x, -hoop.y)
       ctx.drawImage(this.hoopImage, 0, netSourceY, this.hoopImage.naturalWidth, this.hoopImage.naturalHeight - netSourceY, left, top + height * .22, width, height * .78)
     }

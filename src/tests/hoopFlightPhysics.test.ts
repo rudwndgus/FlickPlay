@@ -4,10 +4,11 @@ import type { GameController } from '../games/types'
 
 type InternalHoopFlight = GameController & {
   ball: { x: number; y: number; vx: number; vy: number; r: number; collisionCooldown: number }
-  hoops: Array<{ x: number; y: number; passed: boolean; pulse: number }>
+  hoops: Array<{ x: number; y: number; passed: boolean; pulse: number; netPunch?: number }>
   speed: number
   cleanStreak: number
   scoreEffects: Array<{ label: string; streak: number }>
+  captureTime: number
 }
 
 const makeController = () => {
@@ -22,8 +23,8 @@ const makeController = () => {
 describe('Hoop Flight physics', () => {
   it('pushes the ball backward when it strikes the rim', () => {
     const { controller } = makeController()
-    const hoop = { x: 275, y: 370, passed: false, pulse: 0 }
-    const rimHalf = 138 * .43
+    const hoop = { x: 275, y: 370, passed: false, pulse: 0, netPunch: 0 }
+    const rimHalf = 104 * .43
     controller.hoops = [hoop]
     controller.ball.x = hoop.x - rimHalf - controller.ball.r + 3
     controller.ball.y = hoop.y
@@ -38,7 +39,7 @@ describe('Hoop Flight physics', () => {
 
   it('scores only when the ball descends through the rim opening', () => {
     const { controller, onScore } = makeController()
-    const hoop = { x: 275, y: 370, passed: false, pulse: 0 }
+    const hoop = { x: 275, y: 370, passed: false, pulse: 0, netPunch: 0 }
     controller.hoops = [hoop]
     controller.ball.x = hoop.x
     controller.ball.y = hoop.y - 10
@@ -50,6 +51,8 @@ describe('Hoop Flight physics', () => {
     expect(controller.getScore()).toBe(1)
     expect(onScore).toHaveBeenCalledWith(1)
     expect(hoop.passed).toBe(true)
+    expect(hoop.netPunch).toBe(1)
+    expect(controller.captureTime).toBeGreaterThan(0)
   })
 
   it('escalates consecutive clean shots into combo effects', () => {
