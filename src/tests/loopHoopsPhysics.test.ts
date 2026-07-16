@@ -41,6 +41,29 @@ describe('Loop Hoops physics', () => {
     expect(onFinish).not.toHaveBeenCalled()
   })
 
+  it('wraps through both open side edges without bouncing', () => {
+    const { controller } = makeController()
+    controller.target.side = 1; controller.target.x = 390 - 82
+    controller.ball.x = -controller.ball.r - 2; controller.ball.y = 600
+    controller.ball.vx = -120; controller.ball.vy = 0; controller.touchedSurface = false
+
+    controller.update(.01)
+
+    expect(controller.ball.x).toBeGreaterThan(390 - controller.ball.r)
+    expect(controller.ball.vx).toBe(-120)
+    expect(controller.touchedSurface).toBe(false)
+
+    controller.target.side = -1; controller.target.x = 82
+    controller.ball.x = 390 + controller.ball.r + 2; controller.ball.y = 600
+    controller.ball.vx = 120; controller.ball.vy = 0; controller.touchedSurface = false
+
+    controller.update(.01)
+
+    expect(controller.ball.x).toBeLessThan(controller.ball.r)
+    expect(controller.ball.vx).toBe(120)
+    expect(controller.touchedSurface).toBe(false)
+  })
+
   it('ends only when the timer is depleted', () => {
     const { controller, onFinish } = makeController()
     controller.timeLeft = .0001

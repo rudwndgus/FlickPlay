@@ -570,9 +570,6 @@ class LoopHoopsController extends BaseController {
     if (this.ball.y > floor) {
       this.ball.y = floor; this.ball.vy = -Math.max(350, Math.abs(this.ball.vy) * .72); this.ball.kick = .55; this.touchedSurface = true; this.options.onImpact('tap')
     }
-    if (this.ball.x < this.ball.r || this.ball.x > this.w - this.ball.r) {
-      this.ball.x = clamp(this.ball.x, this.ball.r, this.w - this.ball.r); this.ball.vx *= -.76; this.touchedSurface = true; this.options.onImpact('tap')
-    }
 
     this.collideWithRimUnderside(previous)
     this.collideWithBackboard(previous)
@@ -580,6 +577,7 @@ class LoopHoopsController extends BaseController {
     const rimHalf = 36
     const insideOpening = Math.abs(this.ball.x - this.target.x) < rimHalf - this.ball.r * .35
     if (previous.y <= this.target.y && this.ball.y > this.target.y && this.ball.vy > 0 && insideOpening) this.scoreGoal()
+    this.wrapAcrossSideEdges()
   }
   render(ctx: CanvasRenderingContext2D) {
     const backdrop = ctx.createRadialGradient(this.w * .5, this.h * .48, 40, this.w * .5, this.h * .48, this.h * .72)
@@ -634,6 +632,11 @@ class LoopHoopsController extends BaseController {
       this.ball.vx *= .96; this.ball.vy *= .96
       this.stabilizeBallAfterImpact()
     }
+  }
+  private wrapAcrossSideEdges() {
+    const wrapSpan = this.w + this.ball.r * 2
+    if (this.ball.x + this.ball.r < 0) this.ball.x += wrapSpan
+    else if (this.ball.x - this.ball.r > this.w) this.ball.x -= wrapSpan
   }
   private collideWithRimUnderside(previous: Point) {
     if (this.ball.collisionCooldown > 0 || this.ball.vy >= 0) return
