@@ -260,54 +260,198 @@ class HoopFlightController extends BaseController {
 }
 
 class DunkClimbController extends BaseController {
-  private ball = { x: 190, y: 660, vx: 0, vy: 0, r: 19, flying: false }
-  private hoop: Hoop = { x: 200, y: 280, passed: false, pulse: 0 }
+  private ball = { x: 190, y: 660, vx: 0, vy: 0, r: 19, flying: false, rotation: 0, collisionCooldown: 0 }
+  private launchHoop: Hoop = { x: 190, y: 650, passed: true, pulse: 0, netSwing: 0, netPunch: 0 }
+  private targetHoop: Hoop = { x: 220, y: 290, passed: false, pulse: 0, netSwing: 0, netPunch: 0 }
   private dragStart: Point | null = null
   private dragPoint: Point | null = null
   private bounces = 0
   private autoClock = 0
-  private respawn = 0
-  reset() { this.ball = { x: this.w * .5, y: this.h * .76, vx: 0, vy: 0, r: 19, flying: false }; this.hoop = { x: random(95, this.w - 95), y: this.h * .32, passed: false, pulse: 0 }; this.dragStart = null; this.dragPoint = null; this.bounces = 0; this.respawn = 0 }
-  constructor(theme: GameTheme, options: ControllerOptions) { super(theme, options); this.reset() }
-  pointerDown(x: number, y: number) { if (!this.ball.flying && distance({ x, y }, this.ball) < 80) { this.dragStart = { x: this.ball.x, y: this.ball.y }; this.dragPoint = { x, y } } }
-  pointerMove(x: number, y: number) { if (this.dragStart) this.dragPoint = { x, y } }
+  private transitionDelay = 0
+  private climbRemaining = 0
+  private cleanStreak = 0
+  private trail: Array<Point & { life: number }> = []
+  private scoreEffect = 0
+  private readonly hoopImage: HTMLImageElement
+  private readonly gravity = 900
+  private readonly shotPower = 6.8
+
+  reset() {
+    const launchY = this.h * .74
+    this.launchHoop = { x: this.w * .5, y: launchY, passed: true, pulse: 0, netSwing: 0, netPunch: 0 }
+    this.targetHoop = this.createTarget(launchY - this.h * .43)
+    this.ball = { x: this.launchHoop.x, y: this.launchHoop.y - 14, vx: 0, vy: 0, r: 19, flying: false, rotation: 0, collisionCooldown: 0 }
+    this.dragStart = null; this.dragPoint = null; this.bounces = 0; this.autoClock = 0
+    this.transitionDelay = 0; this.climbRemaining = 0; this.cleanStreak = 0; this.trail = []; this.scoreEffect = 0
+  }
+  constructor(theme: GameTheme, options: ControllerOptions) {
+    super(theme, options)
+    this.hoopImage = new Image()
+    this.hoopImage.src = `${import.meta.env.BASE_URL}games/hoop-flight/hoop.png`
+    this.reset()
+  }
+  pointerDown(x: number, y: number) {
+    if (!this.ball.flying && this.transitionDelay <= 0 && this.climbRemaining <= 0 && distance({ x, y }, this.ball) < 90) {
+      this.dragStart = { x: this.launchHoop.x, y: this.launchHoop.y - 14 }
+      this.dragPoint = { x: this.ball.x, y: this.ball.y }
+    }
+  }
+  pointerMove(x: number, y: number) {
+    if (!this.dragStart) return
+    const dx = x - this.dragStart.x, dy = y - this.dragStart.y
+    const length = Math.hypot(dx, dy), scale = length > 132 ? 132 / length : 1
+    this.dragPoint = { x: this.dragStart.x + dx * scale, y: this.dragStart.y + dy * scale }
+    this.ball.x = this.dragPoint.x; this.ball.y = this.dragPoint.y
+  }
   pointerUp(x: number, y: number) {
     if (!this.dragStart) return
-    const dx = clamp(this.dragStart.x - x, -130, 130), dy = clamp(this.dragStart.y - y, -140, 140)
-    this.ball.vx = dx * 4.4; this.ball.vy = dy * 4.4; if (Math.abs(this.ball.vy) < 180) this.ball.vy = -520
-    this.ball.flying = true; this.dragStart = null; this.dragPoint = null; this.options.onImpact('tap')
+    this.pointerMove(x, y)
+    const release = this.dragPoint ?? this.dragStart
+    const dx = this.dragStart.x - release.x, dy = this.dragStart.y - release.y
+    if (Math.hypot(dx, dy) < 18) {
+      this.ball.x = this.dragStart.x; this.ball.y = this.dragStart.y
+      this.dragStart = null; this.dragPoint = null
+      return
+    }
+    this.ball.vx = dx * this.shotPower; this.ball.vy = dy * this.shotPower
+    this.ball.flying = true; this.ball.collisionCooldown = .08
+    this.launchHoop.netPunch = 1; this.launchHoop.netSwing = clamp(-dx * .38, -28, 28)
+    this.dragStart = null; this.dragPoint = null; this.trail = []; this.options.onImpact('tap')
   }
-  autopilot() { if (!this.ball.flying) { const dx = (this.ball.x - this.hoop.x) * .25; this.pointerDown(this.ball.x, this.ball.y); this.pointerUp(this.ball.x + dx, this.ball.y + 130) } }
+  autopilot() {
+    if (this.ball.flying || this.transitionDelay > 0 || this.climbRemaining > 0) return
+    const anchor = { x: this.launchHoop.x, y: this.launchHoop.y - 14 }
+    const pullX = clamp((anchor.x - this.targetHoop.x) / 5.8, -48, 48)
+    this.pointerDown(anchor.x, anchor.y); this.pointerMove(anchor.x + pullX, anchor.y + 123); this.pointerUp(anchor.x + pullX, anchor.y + 123)
+  }
   tick(dt: number) {
-    if (this.options.preview) { this.autoClock += dt; if (this.autoClock > 1.15) { this.autoClock = 0; this.autopilot() } }
-    if (this.respawn > 0) {
-      this.respawn -= dt
-      if (this.respawn <= 0) { this.ball = { x: this.w * .5, y: this.h * .76, vx: 0, vy: 0, r: 19, flying: false }; this.hoop = { x: random(90, this.w - 90), y: random(this.h * .22, this.h * .38), passed: false, pulse: 0 }; this.bounces = 0 }
+    if (this.options.preview) { this.autoClock += dt; if (this.autoClock > 1.35) { this.autoClock = 0; this.autopilot() } }
+    this.scoreEffect = Math.max(0, this.scoreEffect - dt * 1.7)
+    this.ball.collisionCooldown = Math.max(0, this.ball.collisionCooldown - dt)
+    for (const hoop of [this.launchHoop, this.targetHoop]) {
+      hoop.pulse = Math.max(0, hoop.pulse - dt * 2.2)
+      hoop.netPunch = Math.max(0, (hoop.netPunch ?? 0) - dt * 2.8)
+      hoop.netSwing = (hoop.netSwing ?? 0) * Math.pow(.045, dt)
+    }
+    this.trail.forEach((point) => { point.life -= dt }); this.trail = this.trail.filter((point) => point.life > 0)
+    if (this.transitionDelay > 0) {
+      this.transitionDelay -= dt
+      this.ball.x += (this.targetHoop.x - this.ball.x) * Math.min(1, dt * 13)
+      this.ball.y += (this.targetHoop.y + 27 - this.ball.y) * Math.min(1, dt * 10)
+      this.ball.rotation += dt * 4
+      if (this.transitionDelay <= 0) this.climbRemaining = this.h * .43
+      return
+    }
+    if (this.climbRemaining > 0) {
+      const step = Math.min(this.climbRemaining, Math.max(5, this.climbRemaining * 8 * dt))
+      this.launchHoop.y += step; this.targetHoop.y += step; this.ball.y += step; this.climbRemaining -= step
+      if (this.climbRemaining <= .5) this.completeClimb()
       return
     }
     if (!this.ball.flying) return
     const lastY = this.ball.y
-    this.ball.vy += 740 * dt; this.ball.x += this.ball.vx * dt; this.ball.y += this.ball.vy * dt
-    if (this.ball.x < this.ball.r || this.ball.x > this.w - this.ball.r) { this.ball.x = clamp(this.ball.x, this.ball.r, this.w - this.ball.r); this.ball.vx *= -.78; this.bounces++ }
-    if (!this.hoop.passed && lastY < this.hoop.y && this.ball.y >= this.hoop.y && Math.abs(this.ball.x - this.hoop.x) < 47) {
-      this.hoop.passed = true; this.hoop.pulse = 1; this.addScore(100 + this.bounces * 75)
-      this.respawn = .42
+    this.ball.vy += this.gravity * dt; this.ball.x += this.ball.vx * dt; this.ball.y += this.ball.vy * dt
+    this.ball.rotation += dt * (4 + Math.abs(this.ball.vx) * .009)
+    this.trail.unshift({ x: this.ball.x, y: this.ball.y, life: .38 }); if (this.trail.length > 14) this.trail.pop()
+    if (this.ball.x < this.ball.r || this.ball.x > this.w - this.ball.r) {
+      this.ball.x = clamp(this.ball.x, this.ball.r, this.w - this.ball.r); this.ball.vx *= -.76; this.bounces++; this.options.onImpact('tap')
     }
-    this.hoop.pulse = Math.max(0, this.hoop.pulse - dt)
+    this.collideWithRims(this.launchHoop); this.collideWithRims(this.targetHoop)
+    const insideOpening = Math.abs(this.ball.x - this.targetHoop.x) < this.hoopWidth() * .36
+    if (!this.targetHoop.passed && lastY <= this.targetHoop.y && this.ball.y > this.targetHoop.y && this.ball.vy > 0 && insideOpening) {
+      this.targetHoop.passed = true; this.targetHoop.pulse = 1; this.targetHoop.netPunch = 1
+      const clean = Math.abs(this.ball.x - this.targetHoop.x) < this.hoopWidth() * .18 && this.bounces === 0
+      this.cleanStreak = clean ? this.cleanStreak + 1 : 0
+      this.setScore(this.score + 1); this.options.onImpact(clean ? 'perfect' : 'score')
+      this.scoreEffect = 1; this.transitionDelay = .34; this.ball.flying = false
+    }
     if (this.ball.y > this.h + 50) this.finish()
   }
   render(ctx: CanvasRenderingContext2D) {
-    this.paintBackdrop(ctx, '#f46236', '#2b1023')
-    ctx.fillStyle = 'rgba(255,230,160,.13)'; for (let y = 100; y < this.h; y += 90) for (let x = 20; x < this.w; x += 54) ctx.fillRect(x, y, 32, 45)
-    drawSideHoop(ctx, this.hoop.x, this.hoop.y, this.hoop.pulse, this.theme.accent)
-    if (this.dragStart && this.dragPoint) {
-      const dx = this.dragStart.x - this.dragPoint.x, dy = this.dragStart.y - this.dragPoint.y
-      ctx.fillStyle = 'rgba(255,255,255,.55)'
-      for (let i = 1; i < 6; i++) { const t = i * .11; const x = this.ball.x + dx * 4.4 * t; const y = this.ball.y + dy * 4.4 * t + 370 * t * t; ctx.beginPath(); ctx.arc(x, y, 4 - i * .35, 0, Math.PI * 2); ctx.fill() }
-      ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(this.ball.x, this.ball.y); ctx.lineTo(this.dragPoint.x, this.dragPoint.y); ctx.stroke()
+    this.paintBackdrop(ctx, '#f1f1f2', '#e5e5e7')
+    ctx.fillStyle = 'rgba(105,105,112,.13)'; ctx.font = `900 ${Math.min(132, this.w * .29)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(this.score), this.w * .5, this.h * .43)
+    ctx.fillStyle = 'rgba(80,80,86,.45)'; ctx.font = '900 17px system-ui'; ctx.fillText('DUNK CLIMB', this.w * .5, 62)
+    this.drawHoopLayer(ctx, this.launchHoop, false); this.drawHoopLayer(ctx, this.targetHoop, false)
+    if (this.dragStart && this.dragPoint) this.drawAimGuide(ctx)
+    this.drawTrail(ctx); drawBasketball(ctx, this.ball.x, this.ball.y, this.ball.r, this.ball.rotation, this.cleanStreak >= 3)
+    this.drawHoopLayer(ctx, this.launchHoop, true); this.drawHoopLayer(ctx, this.targetHoop, true)
+    if (this.scoreEffect > 0) this.drawScoreEffect(ctx)
+    if (!this.ball.flying && this.transitionDelay <= 0 && this.climbRemaining <= 0) {
+      ctx.fillStyle = 'rgba(85,85,91,.64)'; ctx.font = '800 13px system-ui'; ctx.textAlign = 'center'; ctx.fillText('DRAG  •  AIM  •  RELEASE', this.w * .5, this.h - 42)
+      ctx.strokeStyle = 'rgba(100,100,106,.28)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(this.launchHoop.x, this.launchHoop.y + 74); ctx.lineTo(this.launchHoop.x, this.launchHoop.y + 102); ctx.stroke(); ctx.beginPath(); ctx.moveTo(this.launchHoop.x - 7, this.launchHoop.y + 94); ctx.lineTo(this.launchHoop.x, this.launchHoop.y + 102); ctx.lineTo(this.launchHoop.x + 7, this.launchHoop.y + 94); ctx.stroke()
     }
-    drawBasketball(ctx, this.ball.x, this.ball.y, this.ball.r, this.elapsed * 3, false)
-    drawGameLabel(ctx, this.ball.flying ? 'FOLLOW THE ARC' : 'PULL • AIM • RELEASE', `${this.score} pts`, this.w, this.h)
+  }
+  private createTarget(y: number): Hoop { return { x: random(76, this.w - 76), y, passed: false, pulse: 0, netSwing: 0, netPunch: 0 } }
+  private completeClimb() {
+    this.launchHoop = { ...this.targetHoop, passed: true, pulse: 0, netPunch: 0 }
+    this.targetHoop = this.createTarget(this.launchHoop.y - this.h * .43)
+    this.ball = { x: this.launchHoop.x, y: this.launchHoop.y - 14, vx: 0, vy: 0, r: 19, flying: false, rotation: this.ball.rotation, collisionCooldown: 0 }
+    this.bounces = 0; this.trail = []; this.climbRemaining = 0
+  }
+  private hoopWidth() { return Math.min(105, this.w * .27) }
+  private collideWithRims(hoop: Hoop) {
+    if (this.ball.collisionCooldown > 0) return
+    const rimHalf = this.hoopWidth() * .43
+    for (const postX of [hoop.x - rimHalf, hoop.x + rimHalf]) {
+      const dx = this.ball.x - postX, dy = this.ball.y - hoop.y, length = Math.hypot(dx, dy), minDistance = this.ball.r + 5
+      if (length === 0 || length >= minDistance) continue
+      const nx = dx / length, ny = dy / length, overlap = minDistance - length
+      this.ball.x += nx * overlap; this.ball.y += ny * overlap
+      const impact = this.ball.vx * nx + this.ball.vy * ny
+      if (impact < 0) { this.ball.vx -= 1.72 * impact * nx; this.ball.vy -= 1.72 * impact * ny }
+      this.ball.collisionCooldown = .065; this.bounces++; hoop.netSwing = clamp(this.ball.vx * .035, -24, 24); this.options.onImpact('tap'); return
+    }
+  }
+  private drawAimGuide(ctx: CanvasRenderingContext2D) {
+    if (!this.dragStart || !this.dragPoint) return
+    const vx = (this.dragStart.x - this.dragPoint.x) * this.shotPower, vy = (this.dragStart.y - this.dragPoint.y) * this.shotPower
+    for (let i = 1; i <= 12; i++) {
+      const t = i * .075, x = this.ball.x + vx * t, y = this.ball.y + vy * t + this.gravity * t * t * .5
+      if (y < 82 || y > this.h - 70) continue
+      ctx.fillStyle = `rgba(134,134,139,${.72 - i * .035})`; ctx.beginPath(); ctx.arc(x, y, Math.max(2.2, 5 - i * .2), 0, Math.PI * 2); ctx.fill()
+    }
+    ctx.strokeStyle = 'rgba(242,146,40,.42)'; ctx.lineWidth = 3; ctx.setLineDash([5, 7]); ctx.beginPath(); ctx.moveTo(this.dragStart.x, this.dragStart.y); ctx.lineTo(this.dragPoint.x, this.dragPoint.y); ctx.stroke(); ctx.setLineDash([])
+  }
+  private drawHoopLayer(ctx: CanvasRenderingContext2D, hoop: Hoop, foreground: boolean) {
+    if (!this.hoopImage.complete || !this.hoopImage.naturalWidth) return
+    const width = this.hoopWidth(), height = width * (483 / 560), left = hoop.x - width * .5, top = hoop.y - height * .135
+    ctx.save()
+    if (hoop === this.launchHoop && this.dragStart && this.dragPoint && foreground) {
+      const rimSourceY = this.hoopImage.naturalHeight * .105, netSourceY = this.hoopImage.naturalHeight * .22
+      ctx.drawImage(this.hoopImage, 0, rimSourceY, this.hoopImage.naturalWidth, netSourceY - rimSourceY, left, top + height * .105, width, height * .115)
+      const pullX = this.dragPoint.x - hoop.x, pullY = this.dragPoint.y - hoop.y
+      const angle = Math.atan2(pullY, pullX) - Math.PI * .5, stretch = clamp(Math.hypot(pullX, pullY) / 48, 1, 2.45)
+      ctx.translate(hoop.x, hoop.y); ctx.rotate(angle); ctx.scale(.92, stretch); ctx.translate(-hoop.x, -hoop.y)
+      ctx.drawImage(this.hoopImage, 0, netSourceY, this.hoopImage.naturalWidth, this.hoopImage.naturalHeight - netSourceY, left, top + height * .22, width, height * .78)
+      ctx.restore(); return
+    }
+    if (hoop.pulse > 0) { ctx.shadowColor = '#ffb52e'; ctx.shadowBlur = 30 * hoop.pulse }
+    if (!foreground) {
+      const sourceHeight = this.hoopImage.naturalHeight * .24
+      ctx.drawImage(this.hoopImage, 0, 0, this.hoopImage.naturalWidth, sourceHeight, left, top, width, height * .24)
+    } else {
+      const rimSourceY = this.hoopImage.naturalHeight * .105, netSourceY = this.hoopImage.naturalHeight * .22
+      ctx.drawImage(this.hoopImage, 0, rimSourceY, this.hoopImage.naturalWidth, netSourceY - rimSourceY, left, top + height * .105, width, height * .115)
+      ctx.translate(hoop.x, hoop.y)
+      const punch = hoop.netPunch ?? 0, stretch = 1 + Math.sin((1 - punch) * Math.PI * 3) * punch * .28
+      ctx.transform(1, 0, (hoop.netSwing ?? 0) / Math.max(1, height), stretch, 0, 0); ctx.translate(-hoop.x, -hoop.y)
+      ctx.drawImage(this.hoopImage, 0, netSourceY, this.hoopImage.naturalWidth, this.hoopImage.naturalHeight - netSourceY, left, top + height * .22, width, height * .78)
+    }
+    ctx.restore()
+  }
+  private drawTrail(ctx: CanvasRenderingContext2D) {
+    if (!this.ball.flying) return
+    this.trail.forEach((point, index) => {
+      const alpha = point.life / .38 * .22
+      ctx.fillStyle = this.cleanStreak >= 3 ? `rgba(255,91,24,${alpha * 2})` : `rgba(115,115,120,${alpha})`
+      ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(3, this.ball.r - index * .85), 0, Math.PI * 2); ctx.fill()
+    })
+  }
+  private drawScoreEffect(ctx: CanvasRenderingContext2D) {
+    const alpha = Math.min(1, this.scoreEffect * 1.8), rise = (1 - this.scoreEffect) * 52
+    ctx.save(); ctx.globalAlpha = alpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = this.cleanStreak >= 2 ? '#ff6b22' : '#f19a2b'; ctx.shadowColor = '#ffb22d'; ctx.shadowBlur = 20
+    ctx.font = `900 ${this.cleanStreak >= 3 ? 31 : 25}px system-ui`; ctx.fillText(this.cleanStreak >= 3 ? `ON FIRE ×${this.cleanStreak}` : this.cleanStreak >= 2 ? `PERFECT ×${this.cleanStreak}` : 'SWISH!', this.targetHoop.x, this.targetHoop.y - 58 - rise)
+    ctx.restore()
   }
 }
 

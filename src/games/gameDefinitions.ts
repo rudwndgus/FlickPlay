@@ -16,9 +16,9 @@ const definitions: Definition[] = [
     id: 'dunk-climb', slug: 'dunk-climb', title: 'Dunk Climb', kicker: 'AIM HIGHER', icon: 'DC', category: 'Skill Basketball',
     shortDescription: '당기고 놓아, 도시의 골대를 타고 끝없이 올라가세요.',
     fullDescription: '공을 뒤로 당겨 방향과 힘을 정한 뒤 놓으세요. 벽 반사와 클린샷을 조합하면 점수가 폭발합니다.',
-    theme: { background: '#f04d2f', surface: '#25121d', accent: '#ffe052', accent2: '#27d6b8', text: '#fffaf1', muted: '#ffd1c4', headerStyle: 'dark' },
+    theme: { background: '#f1f1f2', surface: '#e5e5e7', accent: '#f19a2b', accent2: '#e94b2f', text: '#222226', muted: '#8a8a90', headerStyle: 'dark' },
     controls: [{ label: '드래그', description: '공을 당겨 예상 궤적과 파워를 정합니다.' }, { label: '놓기', description: '당긴 반대 방향으로 발사합니다.' }],
-    scoringRules: [{ label: '골', value: '+100' }, { label: 'WALL + CLEAN', value: '보너스 합산' }],
+    scoringRules: [{ label: '골', value: '+1' }, { label: '연속 클린샷', value: 'PERFECT / ON FIRE' }],
   },
   {
     id: 'loop-hoops', slug: 'loop-hoops', title: 'Loop Hoops', kicker: 'SIDE TO SIDE', icon: 'LH', category: 'Loop Basketball',
