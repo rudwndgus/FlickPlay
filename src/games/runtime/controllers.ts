@@ -53,7 +53,8 @@ abstract class BaseController implements GameController {
   }
 }
 
-type Hoop = { x: number; y: number; passed: boolean; pulse: number }
+type Hoop = { x: number; y: number; passed: boolean; pulse: number; netSwing?: number; netVelocity?: number }
+type HoopScoreEffect = { x: number; y: number; life: number; label: string; clean: boolean; streak: number }
 
 class HoopFlightController extends BaseController {
   private ball = { x: 110, y: 400, vx: 0, vy: 0, r: 20, rotation: 0, kick: 0, collisionCooldown: 0 }
@@ -61,11 +62,15 @@ class HoopFlightController extends BaseController {
   private speed = 138
   private autoClock = 0
   private readonly hoopImage: HTMLImageElement
+  private cleanStreak = 0
+  private scoreEffects: HoopScoreEffect[] = []
+  private scoreFlash = 0
+  private fireBurst = 0
 
   reset() {
     this.ball = { x: this.w * .27, y: this.h * .48, vx: 0, vy: 50, r: 20, rotation: -.15, kick: 0, collisionCooldown: 0 }
-    this.speed = 138; this.autoClock = 0
-    this.hoops = [0, 1, 2].map((i) => ({ x: this.w * .86 + i * 255, y: random(this.h * .3, this.h * .67), passed: false, pulse: 0 }))
+    this.speed = 138; this.autoClock = 0; this.cleanStreak = 0; this.scoreEffects = []; this.scoreFlash = 0; this.fireBurst = 0
+    this.hoops = [0, 1, 2].map((i) => ({ x: this.w * .86 + i * 255, y: random(this.h * .3, this.h * .67), passed: false, pulse: 0, netSwing: 0, netVelocity: 0 }))
   }
   constructor(theme: GameTheme, options: ControllerOptions) {
     super(theme, options)
@@ -95,26 +100,42 @@ class HoopFlightController extends BaseController {
     this.ball.y += this.ball.vy * dt
     this.ball.kick = Math.max(0, this.ball.kick - dt * 7.5)
     this.ball.collisionCooldown = Math.max(0, this.ball.collisionCooldown - dt)
+    this.scoreFlash = Math.max(0, this.scoreFlash - dt * 2.8)
+    this.fireBurst = Math.max(0, this.fireBurst - dt * 1.45)
+    this.scoreEffects.forEach((effect) => { effect.life -= dt; effect.x -= this.speed * dt })
+    this.scoreEffects = this.scoreEffects.filter((effect) => effect.life > 0)
     this.ball.rotation += dt * (2.4 + Math.abs(this.ball.vy) * .002)
     this.speed = Math.min(235, 138 + this.elapsed * 1.65)
     for (const hoop of this.hoops) {
       hoop.x -= this.speed * dt; hoop.pulse = Math.max(0, hoop.pulse - dt)
+      hoop.netVelocity = (hoop.netVelocity ?? 0) - (hoop.netSwing ?? 0) * 48 * dt
+      hoop.netVelocity *= Math.pow(.018, dt)
+      hoop.netSwing = (hoop.netSwing ?? 0) + hoop.netVelocity * dt
       const metrics = this.getHoopMetrics(hoop)
       this.collideWithHoop(metrics)
       const insideOpening = Math.abs(this.ball.x - hoop.x) < metrics.rimHalf - this.ball.r * .42
       if (!hoop.passed && insideOpening && previousY < hoop.y - 3 && this.ball.y >= hoop.y + 9 && this.ball.vy > 0) {
         hoop.passed = true; hoop.pulse = 1
         const clean = Math.abs(this.ball.x - hoop.x) < metrics.rimHalf * .42
-        this.addScore(clean ? (this.score > 1 ? 2 : 1) : 1)
+        this.cleanStreak = clean ? this.cleanStreak + 1 : 0
+        const points = clean ? (this.cleanStreak >= 3 ? 3 : this.cleanStreak === 2 ? 2 : 1) : 1
+        const label = clean ? (this.cleanStreak >= 3 ? `FIRE ×${this.cleanStreak}` : this.cleanStreak === 2 ? 'PERFECT ×2' : 'CLEAN!') : 'SWISH!'
+        this.setScore(this.score + points)
+        this.options.onImpact(clean ? 'perfect' : 'score')
+        hoop.netVelocity = clamp((this.ball.x - hoop.x) * 4.5 + 105, -150, 150)
+        this.scoreEffects.push({ x: hoop.x, y: hoop.y, life: 1, label, clean, streak: this.cleanStreak })
+        this.scoreFlash = clean ? .72 : .38
+        if (this.cleanStreak >= 3) this.fireBurst = 1
       } else if (!hoop.passed && hoop.x + metrics.rimHalf < this.ball.x - this.ball.r) {
         hoop.passed = true
+        this.cleanStreak = 0
       }
       if (insideOpening && this.ball.y > hoop.y + 5 && this.ball.y < hoop.y + metrics.height * .68) {
         this.ball.vx *= Math.pow(.55, dt)
       }
     }
     const last = this.hoops[this.hoops.length - 1]
-    if (last.x < this.w - 180) this.hoops.push({ x: last.x + random(220, 295), y: random(this.h * .25, this.h * .68), passed: false, pulse: 0 })
+    if (last.x < this.w - 180) this.hoops.push({ x: last.x + random(220, 295), y: random(this.h * .25, this.h * .68), passed: false, pulse: 0, netSwing: 0, netVelocity: 0 })
     this.hoops = this.hoops.filter((hoop) => hoop.x > -100)
     if (this.ball.y > this.h - 75 || this.ball.y < 42 || this.ball.x < -45) this.finish()
   }
@@ -127,8 +148,11 @@ class HoopFlightController extends BaseController {
     ctx.fillStyle = '#f2bd3f'; ctx.fillRect(0, this.h - 61, this.w, 61)
     ctx.fillStyle = 'rgba(82,72,54,.3)'; ctx.font = `900 ${Math.min(88, this.w * .2)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(this.score), this.w * .55, this.h * .52)
     for (const hoop of this.hoops) this.drawHoopLayer(ctx, hoop, false)
-    ctx.save(); ctx.translate(this.ball.x, this.ball.y); ctx.scale(1 + this.ball.kick * .16, 1 - this.ball.kick * .1); drawBasketball(ctx, 0, 0, this.ball.r, this.ball.rotation, this.score >= 4); ctx.restore()
+    ctx.save(); ctx.translate(this.ball.x, this.ball.y); ctx.scale(1 + this.ball.kick * .16, 1 - this.ball.kick * .1); drawBasketball(ctx, 0, 0, this.ball.r, this.ball.rotation, this.cleanStreak >= 3); ctx.restore()
     for (const hoop of this.hoops) this.drawHoopLayer(ctx, hoop, true)
+    this.drawScoreEffects(ctx)
+    if (this.fireBurst > 0) { ctx.strokeStyle = `rgba(255,75,25,${this.fireBurst * .7})`; ctx.lineWidth = 8 + this.fireBurst * 7; ctx.shadowColor = '#ff6a24'; ctx.shadowBlur = 28; ctx.strokeRect(4, 88, this.w - 8, this.h - 164); ctx.shadowBlur = 0 }
+    if (this.scoreFlash > 0) { ctx.fillStyle = `rgba(255,248,170,${this.scoreFlash * .16})`; ctx.fillRect(0, 0, this.w, this.h) }
     drawGameLabel(ctx, 'TAP TO BOUNCE', `${Math.floor(this.elapsed * 10)}m`, this.w, this.h)
   }
   private drawPaperWall(ctx: CanvasRenderingContext2D) {
@@ -147,21 +171,14 @@ class HoopFlightController extends BaseController {
     ctx.restore()
   }
   private getHoopMetrics(hoop: Hoop) {
-    const width = Math.min(194, this.w * .48)
-    const height = width * (579 / 720)
-    const left = hoop.x - width * .365
-    const top = hoop.y - height * .345
-    return { hoop, width, height, left, top, rimHalf: width * .33, boardLeft: left + width * .79, boardRight: left + width * .96, boardTop: top + height * .02, boardBottom: top + height * .78 }
+    const width = Math.min(138, this.w * .35)
+    const height = width * (483 / 560)
+    const left = hoop.x - width * .5
+    const top = hoop.y - height * .135
+    return { hoop, width, height, left, top, rimHalf: width * .43 }
   }
   private collideWithHoop(metrics: ReturnType<HoopFlightController['getHoopMetrics']>) {
     if (this.ball.collisionCooldown > 0) return
-    const boardHit = this.ball.x + this.ball.r > metrics.boardLeft && this.ball.x - this.ball.r < metrics.boardRight && this.ball.y + this.ball.r > metrics.boardTop && this.ball.y - this.ball.r < metrics.boardBottom
-    if (boardHit) {
-      this.ball.x = metrics.boardLeft - this.ball.r - 1
-      this.ball.vx = -Math.max(245, Math.abs(this.ball.vx) * .72 + 120)
-      this.ball.vy *= .72
-      this.registerHoopImpact(); return
-    }
     const posts = [metrics.hoop.x - metrics.rimHalf, metrics.hoop.x + metrics.rimHalf]
     for (const postX of posts) {
       const dx = this.ball.x - postX, dy = this.ball.y - metrics.hoop.y
@@ -191,13 +208,31 @@ class HoopFlightController extends BaseController {
     ctx.save()
     if (hoop.pulse > 0) { ctx.shadowColor = '#fff27b'; ctx.shadowBlur = 34 * hoop.pulse }
     if (!foreground) {
-      ctx.drawImage(this.hoopImage, left, top, width, height)
+      const sourceHeight = this.hoopImage.naturalHeight * .24
+      ctx.drawImage(this.hoopImage, 0, 0, this.hoopImage.naturalWidth, sourceHeight, left, top, width, height * .24)
     } else {
-      const sourceY = this.hoopImage.naturalHeight * .31
-      const sourceHeight = this.hoopImage.naturalHeight - sourceY
-      ctx.drawImage(this.hoopImage, 0, sourceY, this.hoopImage.naturalWidth, sourceHeight, left, top + height * .31, width, height * .69)
+      const rimSourceY = this.hoopImage.naturalHeight * .105
+      const netSourceY = this.hoopImage.naturalHeight * .22
+      const rimSourceHeight = netSourceY - rimSourceY
+      ctx.drawImage(this.hoopImage, 0, rimSourceY, this.hoopImage.naturalWidth, rimSourceHeight, left, top + height * .105, width, height * .115)
+      ctx.translate(hoop.x, hoop.y)
+      ctx.transform(1, 0, (hoop.netSwing ?? 0) / Math.max(1, height), 1, 0, 0)
+      ctx.translate(-hoop.x, -hoop.y)
+      ctx.drawImage(this.hoopImage, 0, netSourceY, this.hoopImage.naturalWidth, this.hoopImage.naturalHeight - netSourceY, left, top + height * .22, width, height * .78)
     }
     ctx.restore()
+  }
+  private drawScoreEffects(ctx: CanvasRenderingContext2D) {
+    for (const effect of this.scoreEffects) {
+      const progress = 1 - effect.life, alpha = Math.min(1, effect.life * 2.5)
+      ctx.save(); ctx.translate(effect.x, effect.y - 28 - progress * 48)
+      const color = effect.streak >= 3 ? '#ff5b22' : effect.clean ? '#fff06a' : '#ffffff'
+      ctx.strokeStyle = color; ctx.globalAlpha = alpha * .55; ctx.lineWidth = 4 - progress * 2; ctx.beginPath(); ctx.arc(0, 28 + progress * 8, 28 + progress * 64, 0, Math.PI * 2); ctx.stroke()
+      ctx.globalAlpha = alpha; ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = effect.clean ? 22 : 10; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `900 ${effect.streak >= 3 ? 25 : 21}px system-ui`; ctx.fillText(effect.label, 0, 0)
+      for (let i = 0; i < (effect.clean ? 12 : 7); i++) { const angle = i * 2.4 + effect.streak; const radius = 25 + progress * (42 + i * 2); ctx.fillStyle = i % 2 ? color : '#ef4934'; ctx.beginPath(); ctx.arc(Math.cos(angle) * radius, 28 + Math.sin(angle) * radius * .62, 2.5 + (i % 3), 0, Math.PI * 2); ctx.fill() }
+      if (effect.streak >= 3) { ctx.globalAlpha = alpha * .5; ctx.strokeStyle = '#ff4a20'; ctx.lineWidth = 7; for (let i = 0; i < 5; i++) { const x = (i - 2) * 18; ctx.beginPath(); ctx.moveTo(x, 52); ctx.quadraticCurveTo(x + 12, 25 - i * 3, x + 4, 8); ctx.stroke() } }
+      ctx.restore()
+    }
   }
 }
 

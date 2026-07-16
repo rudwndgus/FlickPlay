@@ -6,6 +6,8 @@ type InternalHoopFlight = GameController & {
   ball: { x: number; y: number; vx: number; vy: number; r: number; collisionCooldown: number }
   hoops: Array<{ x: number; y: number; passed: boolean; pulse: number }>
   speed: number
+  cleanStreak: number
+  scoreEffects: Array<{ label: string; streak: number }>
 }
 
 const makeController = () => {
@@ -21,7 +23,7 @@ describe('Hoop Flight physics', () => {
   it('pushes the ball backward when it strikes the rim', () => {
     const { controller } = makeController()
     const hoop = { x: 275, y: 370, passed: false, pulse: 0 }
-    const rimHalf = 194 * .33
+    const rimHalf = 138 * .43
     controller.hoops = [hoop]
     controller.ball.x = hoop.x - rimHalf - controller.ball.r + 3
     controller.ball.y = hoop.y
@@ -48,5 +50,22 @@ describe('Hoop Flight physics', () => {
     expect(controller.getScore()).toBe(1)
     expect(onScore).toHaveBeenCalledWith(1)
     expect(hoop.passed).toBe(true)
+  })
+
+  it('escalates consecutive clean shots into combo effects', () => {
+    const { controller } = makeController()
+    for (let shot = 0; shot < 3; shot++) {
+      const hoop = { x: 275, y: 370, passed: false, pulse: 0 }
+      controller.hoops = [hoop]
+      controller.ball.x = hoop.x
+      controller.ball.y = hoop.y - 10
+      controller.ball.vx = 0
+      controller.ball.vy = 700
+      controller.update(.03)
+    }
+
+    expect(controller.cleanStreak).toBe(3)
+    expect(controller.getScore()).toBe(6)
+    expect(controller.scoreEffects.at(-1)?.label).toBe('FIRE ×3')
   })
 })
