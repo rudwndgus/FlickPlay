@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { gameRegistry } from '../games/registry'
 import type { GameController } from '../games/types'
-import { NEON_VAULT_MAP } from '../games/runtime/NeonVaultController'
+import { analyzeVaultReachability, NEON_VAULT_MAP } from '../games/runtime/NeonVaultController'
 
 type VaultController = GameController & {
   player: { col: number; row: number; x: number; y: number; moving: boolean; shield: boolean }
@@ -23,6 +23,15 @@ describe('Neon Vault movement', () => {
     expect(NEON_VAULT_MAP).toHaveLength(19)
     expect(NEON_VAULT_MAP.every((row) => row.length === 13)).toBe(true)
     expect(NEON_VAULT_MAP.join('').split('0').length - 1).toBeGreaterThan(110)
+  })
+
+  it('makes every required signal reachable and always allows a route back to the exit', () => {
+    const { controller } = makeController()
+    const analysis = analyzeVaultReachability()
+    expect(analysis.stops.has('11,1')).toBe(true)
+    expect([...controller.dots].every((key) => analysis.cells.has(key))).toBe(true)
+    expect([...analysis.stops].every((key) => analysis.returnableStops.has(key))).toBe(true)
+    expect([...analysis.stops].every((key) => analysis.exitReachableStops.has(key))).toBe(true)
   })
 
   it('slides to the tile immediately before a wall', () => {
