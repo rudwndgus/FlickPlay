@@ -81,7 +81,7 @@ export class NeonVaultController implements GameController {
   private staticLayer: HTMLCanvasElement | null = null
   player = { col: 1, row: 17, x: 1, y: 17, moving: false, shield: false }
   dots = new Set<string>(); coins = new Set<string>(); switches = new Set<string>()
-  private path: Node[] = []; private pathIndex = 0; private segmentClock = 0; private segmentDuration = .055
+  private path: Node[] = []; private pathIndex = 0; private segmentClock = 0; private segmentDuration = .05
   private drag: Point | null = null; private dragTime = 0; private autoClock = 0
   private enemy = { x: 4, y: 11, direction: 1 }; private dying = 0; private clearing = 0; private shieldGrace = 0; private shake = 0; private impactPulse = 0
   private moveDirection = { x: 0, y: -1 }
@@ -135,7 +135,7 @@ export class NeonVaultController implements GameController {
     if (this.player.moving || this.dying || this.clearing || this.status !== 'playing') return
     let sx = 0, sy = 0; if (Math.abs(dx) > Math.abs(dy)) sx = dx > 0 ? 1 : -1; else sy = dy > 0 ? 1 : -1
     const path = this.buildPath(sx, sy); if (path.length < 2) { this.shake = .08; return }
-    this.path = path; this.pathIndex = 0; this.segmentClock = 0; this.segmentDuration = clamp(.045, .075 / (path.length - 1), .34 / (path.length - 1)); this.moveDirection = { x: sx, y: sy }; this.player.moving = true; this.impactPulse = .15; this.options.onImpact('tap')
+    this.path = path; this.pathIndex = 0; this.segmentClock = 0; this.segmentDuration = clamp(.041, .068 / (path.length - 1), .3 / (path.length - 1)); this.moveDirection = { x: sx, y: sy }; this.player.moving = true; this.impactPulse = .15; this.options.onImpact('tap')
   }
   autopilot() { for (const [x, y] of [[0, -70], [70, 0], [-70, 0], [0, 70]].sort(() => Math.random() - .5)) { this.swipe(x, y); if (this.player.moving) break } }
   private burst(x: number, y: number, color: string, count: number) { for (let i = 0; i < count; i++) { const a = i / count * Math.PI * 2; this.particles.push({ x: x + .5, y: y + .5, vx: Math.cos(a) * (1 + i % 3), vy: Math.sin(a) * (1 + i % 3), life: .35 + i % 4 * .08, color }) } }
