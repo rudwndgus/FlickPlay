@@ -4,21 +4,35 @@ type Point = { x: number; y: number }
 type Node = Point & { teleport?: boolean }
 type Particle = Point & { vx: number; vy: number; life: number; color: string }
 
-export const NEON_VAULT_MAP = [
-  '1111111111', '1000000001', '1011011101', '1001000101', '1101010101',
-  '1000010101', '1011110101', '1010000101', '1010111101', '1000000001',
-  '1110110101', '1000100001', '1011101101', '1000000001', '1111111111',
-]
-const START = { x: 1, y: 13 }, EXIT = { x: 8, y: 1 }
-const COINS = ['1,5', '8,9', '7,13']
-const PORTALS = new Map([['8,13', { x: 1, y: 1 }], ['1,1', { x: 8, y: 13 }]])
-const SPIKES = [{ x: 4, y: 9, phase: 0 }, { x: 8, y: 5, phase: .72 }]
+const VAULT_COLS = 13, VAULT_ROWS = 19
+const createVaultMap = () => {
+  const grid = Array.from({ length: VAULT_ROWS }, () => Array(VAULT_COLS).fill('1'))
+  let seed = 0x4e564c54
+  const next = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296 }
+  const stack = [{ x: 1, y: 1 }]; grid[1][1] = '0'
+  while (stack.length) {
+    const current = stack[stack.length - 1]
+    const choices = [[2, 0], [-2, 0], [0, 2], [0, -2]].map(([dx, dy]) => ({ x: current.x + dx, y: current.y + dy, dx, dy })).filter(({ x, y }) => x > 0 && x < VAULT_COLS - 1 && y > 0 && y < VAULT_ROWS - 1 && grid[y][x] === '1')
+    if (!choices.length) { stack.pop(); continue }
+    const choice = choices[Math.floor(next() * choices.length)]; grid[current.y + choice.dy / 2][current.x + choice.dx / 2] = '0'; grid[choice.y][choice.x] = '0'; stack.push({ x: choice.x, y: choice.y })
+  }
+  for (const [x, y] of [[2, 3], [6, 3], [10, 3], [4, 7], [8, 7], [2, 11], [6, 11], [10, 11], [4, 15], [8, 15]]) if ((grid[y][x - 1] === '0' && grid[y][x + 1] === '0') || (grid[y - 1][x] === '0' && grid[y + 1][x] === '0')) grid[y][x] = '0'
+  for (let x = 1; x < VAULT_COLS - 1; x++) { grid[1][x] = '0'; grid[9][x] = '0'; grid[17][x] = '0' }
+  for (let x = 3; x <= 9; x++) grid[5][x] = '0'
+  return grid.map((row) => row.join(''))
+}
+export const NEON_VAULT_MAP = createVaultMap()
+const START = { x: 1, y: 17 }, EXIT = { x: 11, y: 1 }
+const COINS = ['1,9', '11,9', '7,7']
+const PORTALS = new Map([['11,17', { x: 1, y: 1 }], ['1,1', { x: 11, y: 17 }]])
+const SPIKES = [{ x: 5, y: 9, phase: 0 }, { x: 9, y: 13, phase: .72 }]
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const modulo = (value: number, divisor: number) => ((value % divisor) + divisor) % divisor
 
 export class NeonVaultController implements GameController {
   private w = 390; private h = 844; private status: GameStatus = 'playing'; private score = 0; private elapsed = 0; private paused = false
-  player = { col: 1, row: 13, x: 1, y: 13, moving: false, shield: false }
+  private staticLayer: HTMLCanvasElement | null = null
+  player = { col: 1, row: 17, x: 1, y: 17, moving: false, shield: false }
   dots = new Set<string>(); coins = new Set<string>()
   private path: Node[] = []; private pathIndex = 0; private segmentClock = 0; private segmentDuration = .055
   private drag: Point | null = null; private dragTime = 0; private autoClock = 0
@@ -27,7 +41,7 @@ export class NeonVaultController implements GameController {
   private trail: (Point & { life: number })[] = []; private particles: Particle[] = []
 
   constructor(_theme: GameTheme, private readonly options: ControllerOptions) { this.reset() }
-  resize(width: number, height: number) { this.w = width; this.h = height }
+  resize(width: number, height: number) { if (width !== this.w || height !== this.h) this.staticLayer = null; this.w = width; this.h = height }
   pause() { this.paused = true; this.status = this.status === 'finished' ? 'finished' : 'paused' }
   resume() { this.paused = false; if (this.status === 'paused') this.status = 'playing' }
   destroy() { this.paused = true }
@@ -39,15 +53,15 @@ export class NeonVaultController implements GameController {
     this.player = { col: START.x, row: START.y, x: START.x, y: START.y, moving: false, shield: false }
     this.path = []; this.pathIndex = 0; this.segmentClock = 0; this.drag = null; this.autoClock = 0; this.enemy = { x: 2, y: 9, direction: 1 }
     this.dying = 0; this.clearing = 0; this.shake = 0; this.toast = 'COLLECT EVERY SIGNAL'; this.toastLife = 2.4; this.collectedCoins = 0; this.trail = []; this.particles = []; this.coins = new Set(COINS); this.dots = new Set()
-    const reserved = new Set([`${START.x},${START.y}`, `${EXIT.x},${EXIT.y}`, ...COINS, ...PORTALS.keys(), ...SPIKES.map((s) => `${s.x},${s.y}`), '2,9', '3,5'])
-    for (let r = 0; r < NEON_VAULT_MAP.length; r++) for (let c = 0; c < 10; c++) if (NEON_VAULT_MAP[r][c] === '0' && !reserved.has(`${c},${r}`)) this.dots.add(`${c},${r}`)
+    const reserved = new Set([`${START.x},${START.y}`, `${EXIT.x},${EXIT.y}`, ...COINS, ...PORTALS.keys(), ...SPIKES.map((s) => `${s.x},${s.y}`), '2,9', '3,9'])
+    for (let r = 0; r < NEON_VAULT_MAP.length; r++) for (let c = 0; c < VAULT_COLS; c++) if (NEON_VAULT_MAP[r][c] === '0' && !reserved.has(`${c},${r}`)) this.dots.add(`${c},${r}`)
   }
   private addScore(value: number) { this.score += value; this.options.onScore(this.score); this.options.onImpact(value > 1 ? 'perfect' : 'score') }
   private finish() { if (this.options.preview) { this.restart(); return } this.status = 'finished'; this.options.onFinish(this.score) }
   private open(x: number, y: number) { return NEON_VAULT_MAP[y]?.[x] === '0' }
   private spikeActive(spike: { phase: number }) { return modulo(this.elapsed + spike.phase, 1.6) < .9 }
   private laserActive() { const phase = modulo(this.elapsed + .25, 2.2); return phase > .55 && phase < 1.45 }
-  private laserCell(x: number, y: number) { return y === 3 && x >= 4 && x <= 6 }
+  private laserCell(x: number, y: number) { return y === 5 && x >= 4 && x <= 8 }
 
   buildPath(dx: number, dy: number) {
     const nodes: Node[] = [{ x: this.player.col, y: this.player.row }]; let x = this.player.col, y = this.player.row; const used = new Set<string>()
@@ -79,7 +93,7 @@ export class NeonVaultController implements GameController {
     const key = `${node.x},${node.y}`
     if (this.dots.delete(key)) { this.addScore(1); this.burst(node.x, node.y, '#f5ff35', 5) }
     if (this.coins.delete(key)) { this.collectedCoins++; this.addScore(10); this.burst(node.x, node.y, '#ffe45f', 12); this.toast = 'VAULT COIN +10'; this.toastLife = 1 }
-    if (key === '3,5' && !this.player.shield) { this.player.shield = true; this.burst(node.x, node.y, '#6abfff', 12); this.toast = 'SHIELD READY'; this.toastLife = 1.2 }
+    if (key === '3,9' && !this.player.shield) { this.player.shield = true; this.burst(node.x, node.y, '#6abfff', 12); this.toast = 'SHIELD READY'; this.toastLife = 1.2 }
     const spike = SPIKES.find((s) => s.x === node.x && s.y === node.y); if (spike && this.spikeActive(spike)) this.danger(node.x, node.y)
     if (this.laserCell(node.x, node.y) && this.laserActive()) this.danger(node.x, node.y)
     if (Math.hypot(node.x - this.enemy.x, node.y - this.enemy.y) < .45) this.danger(node.x, node.y)
@@ -102,11 +116,11 @@ export class NeonVaultController implements GameController {
     if (this.options.preview && this.autoClock > .75) { this.autoClock = 0; this.autopilot() }
     if (this.dying > 0) { this.dying -= dt; if (this.dying <= 0) this.finish() }
     if (this.clearing > 0) { this.clearing -= dt; if (this.clearing <= 0) { this.addScore(25 + this.collectedCoins * 5); this.finish() } }
-    this.move(dt); this.enemy.x += this.enemy.direction * 1.35 * dt; if (this.enemy.x > 7.6 || this.enemy.x < 1.4) { this.enemy.x = clamp(this.enemy.x, 1.4, 7.6); this.enemy.direction *= -1 }
+    this.move(dt); this.enemy.x += this.enemy.direction * 1.35 * dt; if (this.enemy.x > 10.6 || this.enemy.x < 1.4) { this.enemy.x = clamp(this.enemy.x, 1.4, 10.6); this.enemy.direction *= -1 }
     if (!this.dying && Math.hypot(this.player.x - this.enemy.x, this.player.y - 9) < .36) this.danger(this.player.x, this.player.y)
     this.trail.forEach((p) => { p.life -= dt }); this.trail = this.trail.filter((p) => p.life > 0); this.particles.forEach((p) => { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt }); this.particles = this.particles.filter((p) => p.life > 0)
   }
-  private geometry() { const cell = Math.min(this.w / 10, (this.h - 220) / 15); return { cell, ox: (this.w - cell * 10) / 2, oy: 104 } }
+  private geometry() { const cell = Math.min(this.w / VAULT_COLS, (this.h - 220) / VAULT_ROWS); return { cell, ox: (this.w - cell * VAULT_COLS) / 2, oy: 104 } }
   private point(x: number, y: number) { const g = this.geometry(); return { x: g.ox + (x + .5) * g.cell, y: g.oy + (y + .5) * g.cell } }
   private wallAt(x: number, y: number) { return NEON_VAULT_MAP[y]?.[x] === '1' }
   private drawWall(ctx: CanvasRenderingContext2D, col: number, row: number, cell: number, ox: number, oy: number) {
@@ -125,17 +139,25 @@ export class NeonVaultController implements GameController {
     }
     if (!this.wallAt(col, row - 1)) edge('top'); if (!this.wallAt(col + 1, row)) edge('right'); if (!this.wallAt(col, row + 1)) edge('bottom'); if (!this.wallAt(col - 1, row)) edge('left')
   }
+  private getStaticLayer() {
+    if (this.staticLayer?.width === Math.ceil(this.w) && this.staticLayer.height === Math.ceil(this.h)) return this.staticLayer
+    const layer = document.createElement('canvas'); layer.width = Math.ceil(this.w); layer.height = Math.ceil(this.h)
+    const layerContext = layer.getContext('2d')!; const { cell, ox, oy } = this.geometry()
+    layerContext.fillStyle = '#030308'; layerContext.fillRect(ox, oy, cell * VAULT_COLS, cell * VAULT_ROWS)
+    for (let row = 0; row < VAULT_ROWS; row++) for (let col = 0; col < VAULT_COLS; col++) if (this.wallAt(col, row)) this.drawWall(layerContext, col, row, cell, ox, oy)
+    layerContext.shadowBlur = 0; this.staticLayer = layer; return layer
+  }
   render(ctx: CanvasRenderingContext2D) {
     ctx.fillStyle = '#020204'; ctx.fillRect(0, 0, this.w, this.h)
-    const { cell, ox, oy } = this.geometry(); ctx.save(); if (this.shake) ctx.translate(Math.sin(this.elapsed * 80) * this.shake * 8, Math.cos(this.elapsed * 63) * this.shake * 6); ctx.fillStyle = '#030308'; ctx.fillRect(ox, oy, cell * 10, cell * 15)
-    for (let r = 0; r < 15; r++) for (let c = 0; c < 10; c++) if (NEON_VAULT_MAP[r][c] === '1') this.drawWall(ctx, c, r, cell, ox, oy)
-    for (const key of this.dots) { const [c, r] = key.split(',').map(Number), p = this.point(c, r); ctx.fillStyle = '#f4ff2d'; ctx.shadowColor = '#eaff00'; ctx.shadowBlur = 9; ctx.fillRect(p.x - 2.5, p.y - 2.5, 5, 5) }
+    const { cell } = this.geometry(); ctx.save(); if (this.shake) ctx.translate(Math.sin(this.elapsed * 80) * this.shake * 8, Math.cos(this.elapsed * 63) * this.shake * 6); ctx.drawImage(this.getStaticLayer(), 0, 0)
+    ctx.shadowBlur = 0; ctx.fillStyle = '#f4ff2d'
+    for (const key of this.dots) { const [c, r] = key.split(',').map(Number), p = this.point(c, r); ctx.fillRect(p.x - 2, p.y - 2, 4, 4) }
     for (const key of this.coins) { const [c, r] = key.split(',').map(Number), p = this.point(c, r); ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(this.elapsed * 2); ctx.fillStyle = '#ffe45f'; ctx.shadowColor = '#ffe45f'; ctx.shadowBlur = 18; ctx.fillRect(-5, -5, 10, 10); ctx.restore() }
     for (const [key] of PORTALS) { const [c, r] = key.split(',').map(Number), p = this.point(c, r); ctx.strokeStyle = key === '1,1' ? '#35d9ff' : '#bf50ff'; ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 18; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, cell * .27, this.elapsed * 2, this.elapsed * 2 + 4.8); ctx.stroke() }
     for (const s of SPIKES) { const p = this.point(s.x, s.y), active = this.spikeActive(s); ctx.fillStyle = active ? '#19f7e7' : 'rgba(25,247,231,.2)'; ctx.shadowColor = '#00f5e1'; ctx.shadowBlur = active ? 18 : 4; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(p.x + i * 7 - 5, p.y + 8); ctx.lineTo(p.x + i * 7, p.y - (active ? 9 : 2)); ctx.lineTo(p.x + i * 7 + 5, p.y + 8); ctx.fill() } }
-    const ls = this.point(4, 3), le = this.point(6, 3); ctx.strokeStyle = this.laserActive() ? '#00f5df' : 'rgba(0,245,223,.28)'; ctx.lineWidth = this.laserActive() ? 5 : 2; if (!this.laserActive()) ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(ls.x - 12, ls.y); ctx.lineTo(le.x + 12, le.y); ctx.stroke(); ctx.setLineDash([])
-    const shield = this.point(3, 5); if (!this.player.shield) { ctx.strokeStyle = '#6abfff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(shield.x, shield.y, 8, .3, 2.8); ctx.arc(shield.x, shield.y, 8, 3.5, 5.9); ctx.stroke() }
-    const exit = this.point(EXIT.x, EXIT.y), open = !this.dots.size; ctx.strokeStyle = open ? '#54ffe0' : '#a52b55'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(exit.x, exit.y, 12, this.elapsed * 2, this.elapsed * 2 + 5); ctx.stroke(); if (!open) { ctx.fillStyle = '#ff668a'; ctx.font = '800 8px system-ui'; ctx.textAlign = 'center'; ctx.fillText(String(this.dots.size), exit.x, exit.y + 3) }
+    const ls = this.point(4, 5), le = this.point(8, 5); ctx.strokeStyle = this.laserActive() ? '#00f5df' : 'rgba(0,245,223,.28)'; ctx.lineWidth = this.laserActive() ? 5 : 2; if (!this.laserActive()) ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(ls.x - 9, ls.y); ctx.lineTo(le.x + 9, le.y); ctx.stroke(); ctx.setLineDash([])
+    const shield = this.point(3, 9); if (!this.player.shield) { ctx.strokeStyle = '#6abfff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(shield.x, shield.y, 7, .3, 2.8); ctx.arc(shield.x, shield.y, 7, 3.5, 5.9); ctx.stroke() }
+    const exit = this.point(EXIT.x, EXIT.y), open = !this.dots.size; ctx.strokeStyle = open ? '#54ffe0' : '#a52b55'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(exit.x, exit.y, 10, this.elapsed * 2, this.elapsed * 2 + 5); ctx.stroke(); if (!open) { ctx.fillStyle = '#ff668a'; ctx.font = '800 7px system-ui'; ctx.textAlign = 'center'; ctx.fillText(String(this.dots.size), exit.x, exit.y + 3) }
     const enemy = this.point(this.enemy.x, 9); ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(this.elapsed + .8); ctx.fillStyle = '#16f5e6'; ctx.shadowColor = '#00f5e1'; ctx.shadowBlur = 20; ctx.fillRect(-7, -7, 14, 14); ctx.fillStyle = '#032b2a'; ctx.fillRect(-3, -3, 6, 6); ctx.restore()
     for (const t of this.trail) { const p = this.point(t.x, t.y); ctx.globalAlpha = t.life; ctx.fillStyle = '#f4ff2d'; ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill() } ctx.globalAlpha = 1
     for (const q of this.particles) { const p = this.point(q.x - .5, q.y - .5); ctx.globalAlpha = clamp(q.life * 2, 0, 1); ctx.fillStyle = q.color; ctx.fillRect(p.x, p.y, 4, 4) } ctx.globalAlpha = 1
