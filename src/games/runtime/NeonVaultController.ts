@@ -114,7 +114,13 @@ export class NeonVaultController implements GameController {
   private finish() { if (this.options.preview) { this.restart(); return } this.status = 'finished'; this.options.onFinish(this.score) }
   private spikeActive(spike: { phase: number }) { return modulo(this.elapsed + spike.phase, 1.6) < .9 }
   private laserActive() { const phase = modulo(this.elapsed + .25, 2.2); return phase > .55 && phase < 1.45 }
-  private laserCell(x: number, y: number) { const laser = this.config.laser; return y === laser.row && x >= laser.from && x <= laser.to }
+  private activeHazardAt(x: number, y: number) {
+    const config = this.config, laser = config.laser
+    const spikeHit = config.spikes.some((spike) => this.spikeActive(spike) && Math.hypot(x - spike.x, y - spike.y) < .55)
+    const laserHit = this.laserActive() && Math.abs(y - laser.row) < .38 && x >= laser.from - .6 && x <= laser.to + .6
+    const enemyHit = Math.hypot(x - this.enemy.x, y - config.enemy.row) < .52
+    return spikeHit || laserHit || enemyHit
+  }
 
   buildPath(dx: number, dy: number) {
     return traceVaultPath(this.config, { x: this.player.col, y: this.player.row }, dx, dy)
@@ -150,8 +156,7 @@ export class NeonVaultController implements GameController {
     if (this.coins.delete(key)) { this.collectedCoins++; this.addScore(10); this.burst(node.x, node.y, '#ffe45f', 12); this.toast = 'VAULT COIN +10'; this.toastLife = 1 }
     if (this.switches.delete(key)) { const active = config.switches.length - this.switches.size; this.addScore(5); this.burst(node.x, node.y, '#19f7e7', 16); this.shake = .16; this.toast = this.switches.size ? `SWITCH ${active}/${config.switches.length} • KEEP GOING` : 'ALL SWITCHES ACTIVE'; this.toastLife = 1.6; this.options.onImpact('perfect') }
     if (key === config.shield && !this.player.shield) { this.player.shield = true; this.burst(node.x, node.y, '#6abfff', 12); this.toast = 'SHIELD READY'; this.toastLife = 1.2 }
-    const spike = config.spikes.find((s) => s.x === node.x && s.y === node.y)
-    if ((spike && this.spikeActive(spike)) || (this.laserCell(node.x, node.y) && this.laserActive()) || Math.hypot(node.x - this.enemy.x, node.y - this.enemy.y) < .45) this.danger(node.x, node.y)
+    if (this.activeHazardAt(node.x, node.y)) this.danger(node.x, node.y)
     if (!this.dots.size && !this.switches.size) { this.toast = 'EXIT OPEN'; this.toastLife = 1.6 }
     if (node.x === config.exit.x && node.y === config.exit.y) { if (this.dots.size || this.switches.size) { this.toast = this.switches.size ? `${this.switches.size} SWITCHES • ${this.dots.size} SIGNALS` : `${this.dots.size} SIGNALS LEFT`; this.toastLife = 1.5 } else { this.player.moving = false; this.clearing = .72; this.burst(node.x, node.y, '#54ffe0', 24) } }
   }
@@ -171,8 +176,9 @@ export class NeonVaultController implements GameController {
     if (this.options.preview && this.autoClock > .75) { this.autoClock = 0; this.autopilot() }
     if (this.dying > 0) { this.dying -= dt; if (this.dying <= 0) this.finish() }
     if (this.clearing > 0) { this.clearing -= dt; if (this.clearing <= 0) { this.addScore(25 + this.collectedCoins * 5); if (this.stage < VAULT_STAGES.length) { this.stage++; this.setupStage(); this.options.onImpact('perfect') } else this.finish() } }
+    if ((this.status as GameStatus) === 'finished') return
     const enemy = this.config.enemy; this.move(dt); this.enemy.x += this.enemy.direction * enemy.speed * dt; if (this.enemy.x > enemy.max || this.enemy.x < enemy.min) { this.enemy.x = clamp(this.enemy.x, enemy.min, enemy.max); this.enemy.direction *= -1 }
-    if (!this.dying && Math.hypot(this.player.x - this.enemy.x, this.player.y - enemy.row) < .36) this.danger(this.player.x, this.player.y)
+    if (!this.dying && !this.clearing && this.activeHazardAt(this.player.x, this.player.y)) this.danger(this.player.x, this.player.y)
     this.trail.forEach((p) => { p.life -= dt }); this.trail = this.trail.filter((p) => p.life > 0); this.particles.forEach((p) => { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt }); this.particles = this.particles.filter((p) => p.life > 0)
   }
   private geometry() { const cell = Math.min(this.w / VAULT_COLS, (this.h - 220) / VAULT_ROWS); return { cell, ox: (this.w - cell * VAULT_COLS) / 2, oy: 104 } }

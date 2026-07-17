@@ -9,6 +9,10 @@ type VaultController = GameController & {
   coins: Set<string>
   switches: Set<string>
   clearing: number
+  dying: number
+  elapsed: number
+  shieldGrace: number
+  enemy: { x: number; y: number; direction: number }
   stage: number
   buildPath: (dx: number, dy: number) => { x: number; y: number; teleport?: boolean }[]
   visit: (node: { x: number; y: number }) => void
@@ -21,6 +25,14 @@ const makeController = () => {
   const controller = game.createController({ preview: false, onScore, onFinish, onImpact: vi.fn() }) as VaultController
   controller.resize(390, 844, 1); controller.restart()
   return { controller, onScore, onFinish }
+}
+
+const enterStageTwo = (controller: VaultController) => {
+  controller.dots.clear()
+  controller.switches.clear()
+  controller.visit({ x: 11, y: 1 })
+  for (let i = 0; i < 24; i++) controller.update(.033)
+  expect(controller.stage).toBe(2)
 }
 
 describe('Neon Vault movement', () => {
@@ -100,6 +112,76 @@ describe('Neon Vault movement', () => {
     expect(controller.player.moving).toBe(true)
   })
 
+  it('kills a player waiting on a blinking laser when the line turns on', () => {
+    const { controller } = makeController()
+    controller.player = { col: 5, row: 11, x: 5, y: 11, moving: false, shield: false }
+    controller.enemy = { x: 10.6, y: 11, direction: 1 }
+    for (let i = 0; i < 8; i++) controller.update(.033)
+    expect(controller.dying).toBe(0)
+    for (let i = 0; i < 2; i++) controller.update(.033)
+    expect(controller.dying).toBeGreaterThan(0)
+  })
+
+  it('checks active spikes and moving enemies even while the player is stationary', () => {
+    const spikeRun = makeController().controller
+    spikeRun.player = { col: 5, row: 9, x: 5, y: 9, moving: false, shield: false }
+    spikeRun.enemy = { x: 10.6, y: 11, direction: 1 }
+    spikeRun.update(.001)
+    expect(spikeRun.dying).toBeGreaterThan(0)
+
+    const enemyRun = makeController().controller
+    enemyRun.player = { col: 4, row: 11, x: 4, y: 11, moving: false, shield: false }
+    enemyRun.enemy = { x: 4.2, y: 11, direction: 1 }
+    enemyRun.update(.001)
+    expect(enemyRun.dying).toBeGreaterThan(0)
+  })
+
+  it('detects an active laser continuously while sliding across it', () => {
+    const { controller } = makeController()
+    controller.elapsed = .4
+    controller.player = { col: 3, row: 11, x: 3, y: 11, moving: false, shield: false }
+    controller.enemy = { x: 10.6, y: 11, direction: 1 }
+    controller.swipe!(70, 0)
+    controller.update(.033)
+    controller.update(.033)
+    expect(controller.dying).toBeGreaterThan(0)
+  })
+
+  it('uses shield grace once, then kills the player if they remain on an active laser', () => {
+    const { controller } = makeController()
+    controller.player = { col: 5, row: 11, x: 5, y: 11, moving: false, shield: true }
+    controller.enemy = { x: 10.6, y: 11, direction: 1 }
+    for (let i = 0; i < 10; i++) controller.update(.033)
+    expect(controller.player.shield).toBe(false)
+    expect(controller.shieldGrace).toBeGreaterThan(0)
+    expect(controller.dying).toBe(0)
+    for (let i = 0; i < 17; i++) controller.update(.033)
+    expect(controller.dying).toBeGreaterThan(0)
+  })
+
+  it('applies continuous laser, spike, and enemy collision checks in the mint stage', () => {
+    const laserRun = makeController().controller
+    enterStageTwo(laserRun)
+    laserRun.elapsed = 0
+    laserRun.player = { col: 5, row: 17, x: 5, y: 17, moving: false, shield: false }
+    for (let i = 0; i < 10; i++) laserRun.update(.033)
+    expect(laserRun.dying).toBeGreaterThan(0)
+
+    const spikeRun = makeController().controller
+    enterStageTwo(spikeRun)
+    spikeRun.elapsed = 0
+    spikeRun.player = { col: 9, row: 9, x: 9, y: 9, moving: false, shield: false }
+    spikeRun.update(.001)
+    expect(spikeRun.dying).toBeGreaterThan(0)
+
+    const enemyRun = makeController().controller
+    enterStageTwo(enemyRun)
+    enemyRun.player = { col: 7, row: 7, x: 7, y: 7, moving: false, shield: false }
+    enemyRun.enemy = { x: 7, y: 7, direction: 1 }
+    enemyRun.update(.001)
+    expect(enemyRun.dying).toBeGreaterThan(0)
+  })
+
   it('teleports through a portal and keeps the original direction', () => {
     const { controller } = makeController()
     controller.player = { col: 5, row: 17, x: 5, y: 17, moving: false, shield: false }
@@ -123,12 +205,8 @@ describe('Neon Vault movement', () => {
 
   it('opens a solvable mint stage after stage one and only finishes at its exit', () => {
     const { controller, onFinish } = makeController()
-    controller.dots.clear()
-    controller.switches.clear()
-    controller.visit({ x: 11, y: 1 })
-    for (let i = 0; i < 24; i++) controller.update(.033)
+    enterStageTwo(controller)
 
-    expect(controller.stage).toBe(2)
     expect(controller.player).toMatchObject({ col: 11, row: 17, moving: false })
     expect(controller.getStatus()).toBe('playing')
     expect(onFinish).not.toHaveBeenCalled()
