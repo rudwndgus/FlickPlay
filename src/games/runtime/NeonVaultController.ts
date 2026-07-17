@@ -42,7 +42,7 @@ const VAULT_STAGES: VaultStage[] = [
     map: NEON_VAULT_STAGE_TWO_MAP, start: { x: 11, y: 17 }, exit: { x: 1, y: 1 }, coins: ['11,7', '5,9', '3,15'], portals: new Map(),
     spikes: [{ x: 9, y: 9, phase: .25 }, { x: 3, y: 17, phase: .95 }, { x: 7, y: 15, phase: .55 }], switches: ['7,1', '3,11', '1,13'], shield: '7,13',
     enemy: { row: 7, start: 7, min: 5.4, max: 10.6, speed: 1.65 }, laser: { row: 17, from: 5, to: 10 },
-    palette: { background: '#75e2c5', floor: '#effffb', wallOuter: '#034b43', wallInner: '#087d6e', wallEdge: '#bffff1', wallGlow: '#00b890', signal: '#55208c', player: '#fff36a', playerCore: '#735f00', hud: 'rgba(2,55,49,.96)', hudAccent: '#ff70a5' },
+    palette: { background: '#020204', floor: '#030308', wallOuter: '#087d6e', wallInner: '#35d6b5', wallEdge: '#c7fff2', wallGlow: '#20f0c3', signal: '#f4ff2d', player: '#fff36a', playerCore: '#735f00', hud: 'rgba(0,0,0,.92)', hudAccent: '#ff70a5' },
   },
 ]
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -234,8 +234,8 @@ export class NeonVaultController implements GameController {
       if (this.player.shield || this.shieldGrace > 0) { ctx.globalAlpha = this.player.shield ? 1 : .35 + Math.sin(this.elapsed * 35) * .2; ctx.strokeStyle = '#347cff'; ctx.lineWidth = this.player.shield ? 2 : 4; ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1 }
     }
     ctx.restore(); ctx.shadowBlur = 0; ctx.fillStyle = palette.hud; ctx.fillRect(16, 54, this.w - 32, 42); ctx.font = '800 12px monospace'; ctx.fillStyle = palette.signal; ctx.textAlign = 'left'; ctx.fillText(`VAULT 0${this.stage}`, 30, 80); ctx.fillStyle = palette.hudAccent; ctx.textAlign = 'center'; ctx.fillText(`S${this.dots.size}  ⚡${config.switches.length - this.switches.size}/${config.switches.length}`, this.w / 2, 80); ctx.fillStyle = palette.signal; ctx.textAlign = 'right'; ctx.fillText(`◆ ${this.collectedCoins}/${config.coins.length}`, this.w - 30, 80)
-    const darkText = this.stage === 2 ? '#075f50' : '#fff'
+    const darkText = '#fff'
     if (this.toastLife > 0) { ctx.globalAlpha = Math.min(1, this.toastLife * 2); ctx.fillStyle = darkText; ctx.textAlign = 'center'; ctx.font = '900 13px system-ui'; ctx.fillText(this.toast, this.w / 2, 119); ctx.globalAlpha = 1 }
-    ctx.textAlign = 'center'; ctx.fillStyle = darkText; ctx.font = '800 17px system-ui'; ctx.fillText(`${this.score} NEON`, this.w / 2, this.h - 80); ctx.fillStyle = this.stage === 2 ? 'rgba(5,95,80,.72)' : 'rgba(255,255,255,.7)'; ctx.font = '700 11px system-ui'; ctx.fillText('SWIPE • SLIDE TO THE WALL', this.w / 2, this.h - 108)
+    ctx.textAlign = 'center'; ctx.fillStyle = darkText; ctx.font = '800 17px system-ui'; ctx.fillText(`${this.score} NEON`, this.w / 2, this.h - 80); ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.font = '700 11px system-ui'; ctx.fillText('SWIPE • SLIDE TO THE WALL', this.w / 2, this.h - 108)
   }
 }
