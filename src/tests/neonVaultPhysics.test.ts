@@ -12,6 +12,7 @@ type VaultController = GameController & {
   stage: number
   buildPath: (dx: number, dy: number) => { x: number; y: number; teleport?: boolean }[]
   visit: (node: { x: number; y: number }) => void
+  danger: (x: number, y: number) => void
 }
 
 const makeController = () => {
@@ -80,6 +81,23 @@ describe('Neon Vault movement', () => {
     controller.pointerDown(100, 100)
     controller.pointerUp(118, 102)
     expect(controller.player.moving).toBe(false)
+  })
+
+  it('consumes a shield and stops on the collision cell for a tactical redirect', () => {
+    const { controller, onFinish } = makeController()
+    controller.player.shield = true
+    controller.swipe!(0, -70)
+    controller.update(.033)
+    controller.update(.033)
+    expect(controller.player.moving).toBe(true)
+
+    controller.danger(controller.player.x, controller.player.y)
+    expect(controller.player).toMatchObject({ col: 1, row: 16, x: 1, y: 16, moving: false, shield: false })
+    controller.danger(controller.player.x, controller.player.y)
+    expect(controller.getStatus()).toBe('playing')
+    expect(onFinish).not.toHaveBeenCalled()
+    controller.swipe!(0, -70)
+    expect(controller.player.moving).toBe(true)
   })
 
   it('teleports through a portal and keeps the original direction', () => {

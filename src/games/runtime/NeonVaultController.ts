@@ -42,7 +42,7 @@ const VAULT_STAGES: VaultStage[] = [
     map: NEON_VAULT_STAGE_TWO_MAP, start: { x: 11, y: 17 }, exit: { x: 1, y: 1 }, coins: ['11,7', '5,9', '3,15'], portals: new Map(),
     spikes: [{ x: 9, y: 9, phase: .25 }, { x: 3, y: 17, phase: .95 }, { x: 7, y: 15, phase: .55 }], switches: ['7,1', '3,11', '1,13'], shield: '7,13',
     enemy: { row: 7, start: 7, min: 5.4, max: 10.6, speed: 1.65 }, laser: { row: 17, from: 5, to: 10 },
-    palette: { background: '#a8f1dc', floor: '#dffff5', wallOuter: '#168f79', wallInner: '#46cdb0', wallEdge: '#b8fff0', wallGlow: '#28f2c3', signal: '#6930a8', player: '#fff36a', playerCore: '#9a7d00', hud: 'rgba(5,78,67,.92)', hudAccent: '#ff4f8b' },
+    palette: { background: '#75e2c5', floor: '#effffb', wallOuter: '#034b43', wallInner: '#087d6e', wallEdge: '#bffff1', wallGlow: '#00b890', signal: '#55208c', player: '#fff36a', playerCore: '#735f00', hud: 'rgba(2,55,49,.96)', hudAccent: '#ff70a5' },
   },
 ]
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -83,7 +83,7 @@ export class NeonVaultController implements GameController {
   dots = new Set<string>(); coins = new Set<string>(); switches = new Set<string>()
   private path: Node[] = []; private pathIndex = 0; private segmentClock = 0; private segmentDuration = .055
   private drag: Point | null = null; private dragTime = 0; private autoClock = 0
-  private enemy = { x: 4, y: 11, direction: 1 }; private dying = 0; private clearing = 0; private shake = 0; private impactPulse = 0
+  private enemy = { x: 4, y: 11, direction: 1 }; private dying = 0; private clearing = 0; private shieldGrace = 0; private shake = 0; private impactPulse = 0
   private moveDirection = { x: 0, y: -1 }
   private toast = 'COLLECT EVERY SIGNAL'; private toastLife = 2.4; private collectedCoins = 0
   private trail: (Point & { life: number })[] = []; private particles: Particle[] = []
@@ -104,7 +104,7 @@ export class NeonVaultController implements GameController {
     const config = this.config
     this.staticLayer = null; this.player = { col: config.start.x, row: config.start.y, x: config.start.x, y: config.start.y, moving: false, shield: false }
     this.path = []; this.pathIndex = 0; this.segmentClock = 0; this.drag = null; this.autoClock = 0; this.enemy = { x: config.enemy.start, y: config.enemy.row, direction: 1 }
-    this.dying = 0; this.clearing = 0; this.shake = 0; this.impactPulse = 0; this.moveDirection = { x: 0, y: -1 }; this.toast = this.stage === 1 ? 'COLLECT SIGNALS • HIT 2 SWITCHES' : 'STAGE 2 • MINT CIRCUIT'; this.toastLife = 2.4; this.collectedCoins = 0; this.trail = []; this.particles = []; this.coins = new Set(config.coins); this.switches = new Set(config.switches); this.dots = new Set()
+    this.dying = 0; this.clearing = 0; this.shieldGrace = 0; this.shake = 0; this.impactPulse = 0; this.moveDirection = { x: 0, y: -1 }; this.toast = this.stage === 1 ? 'COLLECT SIGNALS • HIT 2 SWITCHES' : 'STAGE 2 • MINT CIRCUIT'; this.toastLife = 2.4; this.collectedCoins = 0; this.trail = []; this.particles = []; this.coins = new Set(config.coins); this.switches = new Set(config.switches); this.dots = new Set()
     const reserved = new Set([`${config.start.x},${config.start.y}`, `${config.exit.x},${config.exit.y}`, ...config.coins, ...config.portals.keys(), ...config.spikes.map((s) => `${s.x},${s.y}`), ...config.switches, `${Math.round(config.enemy.start)},${config.enemy.row}`, config.shield])
     const reachable = analyzeVaultReachability(this.stage).cells
     for (let r = 0; r < config.map.length; r++) for (let c = 0; c < VAULT_COLS; c++) { const key = `${c},${r}`; if (config.map[r][c] === '0' && reachable.has(key) && !reserved.has(key)) this.dots.add(key) }
@@ -133,8 +133,14 @@ export class NeonVaultController implements GameController {
   }
   autopilot() { for (const [x, y] of [[0, -70], [70, 0], [-70, 0], [0, 70]].sort(() => Math.random() - .5)) { this.swipe(x, y); if (this.player.moving) break } }
   private burst(x: number, y: number, color: string, count: number) { for (let i = 0; i < count; i++) { const a = i / count * Math.PI * 2; this.particles.push({ x: x + .5, y: y + .5, vx: Math.cos(a) * (1 + i % 3), vy: Math.sin(a) * (1 + i % 3), life: .35 + i % 4 * .08, color }) } }
+  private stopAtCurrentCell() {
+    const node = this.path[this.pathIndex]
+    if (node) { this.player.col = node.x; this.player.row = node.y; this.player.x = node.x; this.player.y = node.y }
+    this.player.moving = false; this.path = node ? this.path.slice(0, this.pathIndex + 1) : []; this.segmentClock = 0; this.impactPulse = 1; this.shake = Math.max(this.shake, .2)
+  }
   private danger(x: number, y: number) {
-    if (this.player.shield) { this.player.shield = false; this.burst(x, y, '#6abfff', 16); this.toast = 'SHIELD BROKEN'; this.toastLife = 1.2; return }
+    if (this.shieldGrace > 0) return
+    if (this.player.shield) { this.player.shield = false; this.shieldGrace = .55; this.stopAtCurrentCell(); this.burst(x, y, '#6abfff', 20); this.toast = 'SHIELD BLOCK • STOPPED'; this.toastLife = 1.35; this.options.onImpact('perfect'); return }
     if (!this.dying) { this.player.moving = false; this.dying = .68; this.shake = .45; this.burst(x, y, '#ff3ca6', 22); this.options.onImpact('fail') }
   }
   private visit(node: Node) {
@@ -142,11 +148,10 @@ export class NeonVaultController implements GameController {
     const key = `${node.x},${node.y}`
     if (this.dots.delete(key)) { this.addScore(1); this.burst(node.x, node.y, '#f5ff35', 5) }
     if (this.coins.delete(key)) { this.collectedCoins++; this.addScore(10); this.burst(node.x, node.y, '#ffe45f', 12); this.toast = 'VAULT COIN +10'; this.toastLife = 1 }
-    if (this.switches.delete(key)) { this.addScore(5); this.burst(node.x, node.y, '#19f7e7', 16); this.shake = .16; this.toast = this.switches.size ? 'SWITCH 1/2 • FIND THE OTHER' : 'ALL SWITCHES ACTIVE'; this.toastLife = 1.6; this.options.onImpact('perfect') }
+    if (this.switches.delete(key)) { const active = config.switches.length - this.switches.size; this.addScore(5); this.burst(node.x, node.y, '#19f7e7', 16); this.shake = .16; this.toast = this.switches.size ? `SWITCH ${active}/${config.switches.length} • KEEP GOING` : 'ALL SWITCHES ACTIVE'; this.toastLife = 1.6; this.options.onImpact('perfect') }
     if (key === config.shield && !this.player.shield) { this.player.shield = true; this.burst(node.x, node.y, '#6abfff', 12); this.toast = 'SHIELD READY'; this.toastLife = 1.2 }
-    const spike = config.spikes.find((s) => s.x === node.x && s.y === node.y); if (spike && this.spikeActive(spike)) this.danger(node.x, node.y)
-    if (this.laserCell(node.x, node.y) && this.laserActive()) this.danger(node.x, node.y)
-    if (Math.hypot(node.x - this.enemy.x, node.y - this.enemy.y) < .45) this.danger(node.x, node.y)
+    const spike = config.spikes.find((s) => s.x === node.x && s.y === node.y)
+    if ((spike && this.spikeActive(spike)) || (this.laserCell(node.x, node.y) && this.laserActive()) || Math.hypot(node.x - this.enemy.x, node.y - this.enemy.y) < .45) this.danger(node.x, node.y)
     if (!this.dots.size && !this.switches.size) { this.toast = 'EXIT OPEN'; this.toastLife = 1.6 }
     if (node.x === config.exit.x && node.y === config.exit.y) { if (this.dots.size || this.switches.size) { this.toast = this.switches.size ? `${this.switches.size} SWITCHES • ${this.dots.size} SIGNALS` : `${this.dots.size} SIGNALS LEFT`; this.toastLife = 1.5 } else { this.player.moving = false; this.clearing = .72; this.burst(node.x, node.y, '#54ffe0', 24) } }
   }
@@ -162,7 +167,7 @@ export class NeonVaultController implements GameController {
     this.player.x = to.teleport ? to.x : from.x + (to.x - from.x) * t; this.player.y = to.teleport ? to.y : from.y + (to.y - from.y) * t; this.trail.push({ x: this.player.x, y: this.player.y, life: .22 })
   }
   update(dt: number) {
-    if (this.paused || this.status === 'finished') return; dt = Math.min(dt, .033); this.elapsed += dt; this.autoClock += dt; this.toastLife = Math.max(0, this.toastLife - dt); this.shake = Math.max(0, this.shake - dt); this.impactPulse = Math.max(0, this.impactPulse - dt * 7)
+    if (this.paused || this.status === 'finished') return; dt = Math.min(dt, .033); this.elapsed += dt; this.autoClock += dt; this.toastLife = Math.max(0, this.toastLife - dt); this.shieldGrace = Math.max(0, this.shieldGrace - dt); this.shake = Math.max(0, this.shake - dt); this.impactPulse = Math.max(0, this.impactPulse - dt * 7)
     if (this.options.preview && this.autoClock > .75) { this.autoClock = 0; this.autopilot() }
     if (this.dying > 0) { this.dying -= dt; if (this.dying <= 0) this.finish() }
     if (this.clearing > 0) { this.clearing -= dt; if (this.clearing <= 0) { this.addScore(25 + this.collectedCoins * 5); if (this.stage < VAULT_STAGES.length) { this.stage++; this.setupStage(); this.options.onImpact('perfect') } else this.finish() } }
@@ -220,7 +225,7 @@ export class NeonVaultController implements GameController {
       const horizontal = this.moveDirection.x !== 0, along = 1 + movingStretch - impact, across = 1 - movingStretch * .48 + impact * .65
       ctx.save(); ctx.translate(p.x, p.y); ctx.scale((horizontal ? along : across) * clearScale, (horizontal ? across : along) * clearScale)
       ctx.fillStyle = palette.player; ctx.shadowColor = palette.player; ctx.shadowBlur = 24; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = palette.playerCore; ctx.fillRect(-3, -3, 6, 6); ctx.restore()
-      if (this.player.shield) { ctx.strokeStyle = '#6abfff'; ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, Math.PI * 2); ctx.stroke() }
+      if (this.player.shield || this.shieldGrace > 0) { ctx.globalAlpha = this.player.shield ? 1 : .35 + Math.sin(this.elapsed * 35) * .2; ctx.strokeStyle = '#347cff'; ctx.lineWidth = this.player.shield ? 2 : 4; ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1 }
     }
     ctx.restore(); ctx.shadowBlur = 0; ctx.fillStyle = palette.hud; ctx.fillRect(16, 54, this.w - 32, 42); ctx.font = '800 12px monospace'; ctx.fillStyle = palette.signal; ctx.textAlign = 'left'; ctx.fillText(`VAULT 0${this.stage}`, 30, 80); ctx.fillStyle = palette.hudAccent; ctx.textAlign = 'center'; ctx.fillText(`S${this.dots.size}  ⚡${config.switches.length - this.switches.size}/${config.switches.length}`, this.w / 2, 80); ctx.fillStyle = palette.signal; ctx.textAlign = 'right'; ctx.fillText(`◆ ${this.collectedCoins}/${config.coins.length}`, this.w - 30, 80)
     const darkText = this.stage === 2 ? '#075f50' : '#fff'
