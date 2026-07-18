@@ -1,14 +1,18 @@
 import type { ControllerOptions, GameController, GameStatus, GameTheme } from '../types'
 
 type Point = { x: number; y: number }
-type Node = Point & { teleport?: boolean }
+type PrismTurn = 'cw' | 'ccw'
+type Node = Point & { teleport?: boolean; prism?: PrismTurn }
 type Particle = Point & { vx: number; vy: number; life: number; color: string }
+type PulseGate = Point & { phase: number }
 type VaultStage = {
   map: string[]
   start: Point
   exit: Point
   coins: string[]
   portals: Map<string, Point>
+  prisms: Map<string, PrismTurn>
+  gates: PulseGate[]
   spikes: { x: number; y: number; phase: number }[]
   switches: string[]
   shield: string
@@ -30,28 +34,54 @@ export const NEON_VAULT_STAGE_TWO_MAP = [
   '1010101010111', '1010000010101', '1011111110001', '1000000010101', '1011101010101',
   '1010100010001', '1010101110101', '1000100000001', '1111111111111',
 ]
+export const NEON_VAULT_STAGE_THREE_MAP = [
+  '1111111111111', '1000001010001', '1011101000111', '1000001010001', '1000001011101',
+  '1010000010001', '1011101110111', '1000000010001', '1011111010101', '1000100010101',
+  '1110101010101', '1010100000101', '1000111111101', '1010100000001', '1010101011101',
+  '1000100010101', '1010111010101', '1000000010001', '1111111111111',
+]
 const VAULT_STAGES: VaultStage[] = [
   {
     map: NEON_VAULT_MAP, start: { x: 1, y: 17 }, exit: { x: 11, y: 1 }, coins: ['1,9', '11,9', '7,7'],
     portals: new Map([['11,17', { x: 1, y: 1 }], ['1,1', { x: 11, y: 17 }]]),
+    prisms: new Map(), gates: [],
     spikes: [{ x: 5, y: 9, phase: 0 }, { x: 6, y: 9, phase: 0 }, { x: 9, y: 13, phase: .72 }], switches: ['5,3', '11,15'], shield: '3,9',
     enemy: { row: 11, start: 4, min: 3.4, max: 10.6, speed: 1.35 }, laser: { row: 11, from: 5, to: 10 },
     palette: { background: '#020204', floor: '#030308', wallOuter: '#31051f', wallInner: '#650932', wallEdge: '#ff347f', wallGlow: '#ff075e', signal: '#f4ff2d', player: '#fbff65', playerCore: '#9fae00', hud: 'rgba(0,0,0,.9)', hudAccent: '#ff2b79' },
   },
   {
     map: NEON_VAULT_STAGE_TWO_MAP, start: { x: 11, y: 17 }, exit: { x: 1, y: 1 }, coins: ['11,7', '5,9', '3,15'], portals: new Map(),
+    prisms: new Map(), gates: [],
     spikes: [{ x: 9, y: 9, phase: .25 }, { x: 3, y: 17, phase: .95 }, { x: 7, y: 15, phase: .55 }], switches: ['7,1', '3,11', '1,13'], shield: '7,13',
     enemy: { row: 7, start: 7, min: 5.4, max: 10.6, speed: 1.65 }, laser: { row: 17, from: 5, to: 10 },
     palette: { background: '#020204', floor: '#030308', wallOuter: '#087d6e', wallInner: '#35d6b5', wallEdge: '#c7fff2', wallGlow: '#20f0c3', signal: '#f4ff2d', player: '#fff36a', playerCore: '#735f00', hud: 'rgba(0,0,0,.92)', hudAccent: '#ff70a5' },
   },
+  {
+    map: NEON_VAULT_STAGE_THREE_MAP, start: { x: 1, y: 17 }, exit: { x: 11, y: 1 }, coins: ['1,7', '7,9', '9,15'],
+    portals: new Map([['11,17', { x: 1, y: 1 }], ['1,1', { x: 11, y: 17 }]]),
+    prisms: new Map([['7,7', 'cw'], ['7,15', 'ccw']]), gates: [{ x: 5, y: 7, phase: 0 }, { x: 3, y: 15, phase: .9 }],
+    spikes: [{ x: 3, y: 9, phase: .25 }, { x: 9, y: 17, phase: .95 }, { x: 5, y: 15, phase: .55 }], switches: ['9,1', '9,11', '11,13'], shield: '5,13',
+    enemy: { row: 7, start: 4, min: 1.4, max: 6.6, speed: 1.85 }, laser: { row: 13, from: 7, to: 11 },
+    palette: { background: '#010103', floor: '#020106', wallOuter: '#21043f', wallInner: '#64139d', wallEdge: '#df72ff', wallGlow: '#a72cff', signal: '#f4ff2d', player: '#fff4ff', playerCore: '#8c2cff', hud: 'rgba(0,0,0,.94)', hudAccent: '#d968ff' },
+  },
 ]
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const modulo = (value: number, divisor: number) => ((value % divisor) + divisor) % divisor
-const traceVaultPath = (stage: VaultStage, start: Point, dx: number, dy: number) => {
-  const nodes: Node[] = [{ ...start }]; let x = start.x, y = start.y; const used = new Set<string>()
-  for (let guard = 0; guard < 100 && stage.map[y + dy]?.[x + dx] === '0'; guard++) {
-    x += dx; y += dy; nodes.push({ x, y }); const key = `${x},${y}`, portal = stage.portals.get(key)
-    if (portal && !used.has(key)) { used.add(key); used.add(`${portal.x},${portal.y}`); x = portal.x; y = portal.y; nodes.push({ x, y, teleport: true }) }
+const traceVaultPath = (stage: VaultStage, start: Point, dx: number, dy: number, blocked = new Set<string>()) => {
+  const nodes: Node[] = [{ ...start }]; let x = start.x, y = start.y, stepX = dx, stepY = dy
+  const usedPortals = new Set<string>(), usedPrisms = new Set<string>()
+  for (let guard = 0; guard < 100; guard++) {
+    const nextX = x + stepX, nextY = y + stepY, nextKey = `${nextX},${nextY}`
+    if (stage.map[nextY]?.[nextX] !== '0' || blocked.has(nextKey)) break
+    x = nextX; y = nextY; const node: Node = { x, y }; nodes.push(node)
+    const key = `${x},${y}`, portal = stage.portals.get(key)
+    if (portal && !usedPortals.has(key)) { usedPortals.add(key); usedPortals.add(`${portal.x},${portal.y}`); x = portal.x; y = portal.y; nodes.push({ x, y, teleport: true }) }
+    const prismKey = `${x},${y}`, prism = stage.prisms.get(prismKey)
+    if (prism && !usedPrisms.has(prismKey)) {
+      usedPrisms.add(prismKey); nodes[nodes.length - 1].prism = prism
+      const previousX = stepX
+      if (prism === 'cw') { stepX = -stepY; stepY = previousX } else { stepX = stepY; stepY = -previousX }
+    }
   }
   return nodes
 }
@@ -104,8 +134,9 @@ export class NeonVaultController implements GameController {
     const config = this.config
     this.staticLayer = null; this.player = { col: config.start.x, row: config.start.y, x: config.start.x, y: config.start.y, moving: false, shield: false }
     this.path = []; this.pathIndex = 0; this.segmentClock = 0; this.drag = null; this.autoClock = 0; this.enemy = { x: config.enemy.start, y: config.enemy.row, direction: 1 }
-    this.dying = 0; this.clearing = 0; this.shieldGrace = 0; this.shake = 0; this.impactPulse = 0; this.moveDirection = { x: 0, y: -1 }; this.toast = this.stage === 1 ? 'COLLECT SIGNALS • HIT 2 SWITCHES' : 'STAGE 2 • MINT CIRCUIT'; this.toastLife = 2.4; this.collectedCoins = 0; this.trail = []; this.particles = []; this.coins = new Set(config.coins); this.switches = new Set(config.switches); this.dots = new Set()
-    const reserved = new Set([`${config.start.x},${config.start.y}`, `${config.exit.x},${config.exit.y}`, ...config.coins, ...config.portals.keys(), ...config.spikes.map((s) => `${s.x},${s.y}`), ...config.switches, `${Math.round(config.enemy.start)},${config.enemy.row}`, config.shield])
+    const stageToast = ['COLLECT SIGNALS • HIT 2 SWITCHES', 'STAGE 2 • MINT CIRCUIT', 'STAGE 3 • VIOLET PRISM']
+    this.dying = 0; this.clearing = 0; this.shieldGrace = 0; this.shake = 0; this.impactPulse = 0; this.moveDirection = { x: 0, y: -1 }; this.toast = stageToast[this.stage - 1]; this.toastLife = 2.4; this.collectedCoins = 0; this.trail = []; this.particles = []; this.coins = new Set(config.coins); this.switches = new Set(config.switches); this.dots = new Set()
+    const reserved = new Set([`${config.start.x},${config.start.y}`, `${config.exit.x},${config.exit.y}`, ...config.coins, ...config.portals.keys(), ...config.prisms.keys(), ...config.gates.map((gate) => `${gate.x},${gate.y}`), ...config.spikes.map((s) => `${s.x},${s.y}`), ...config.switches, `${Math.round(config.enemy.start)},${config.enemy.row}`, config.shield])
     const reachable = analyzeVaultReachability(this.stage).cells
     for (let r = 0; r < config.map.length; r++) for (let c = 0; c < VAULT_COLS; c++) { const key = `${c},${r}`; if (config.map[r][c] === '0' && reachable.has(key) && !reserved.has(key)) this.dots.add(key) }
   }
@@ -114,16 +145,19 @@ export class NeonVaultController implements GameController {
   private finish() { if (this.options.preview) { this.restart(); return } this.status = 'finished'; this.options.onFinish(this.score) }
   private spikeActive(spike: { phase: number }) { return modulo(this.elapsed + spike.phase, 1.6) < .9 }
   private laserActive() { const phase = modulo(this.elapsed + .25, 2.2); return phase > .55 && phase < 1.45 }
+  private gateActive(gate: PulseGate) { return modulo(this.elapsed + gate.phase, 2.4) < 1.15 }
+  private activeGateKeys() { return new Set(this.config.gates.filter((gate) => this.gateActive(gate)).map((gate) => `${gate.x},${gate.y}`)) }
   private activeHazardAt(x: number, y: number) {
     const config = this.config, laser = config.laser
     const spikeHit = config.spikes.some((spike) => this.spikeActive(spike) && Math.hypot(x - spike.x, y - spike.y) < .55)
     const laserHit = this.laserActive() && Math.abs(y - laser.row) < .38 && x >= laser.from - .6 && x <= laser.to + .6
     const enemyHit = Math.hypot(x - this.enemy.x, y - config.enemy.row) < .52
-    return spikeHit || laserHit || enemyHit
+    const gateHit = config.gates.some((gate) => this.gateActive(gate) && Math.hypot(x - gate.x, y - gate.y) < .52)
+    return spikeHit || laserHit || enemyHit || gateHit
   }
 
   buildPath(dx: number, dy: number) {
-    return traceVaultPath(this.config, { x: this.player.col, y: this.player.row }, dx, dy)
+    return traceVaultPath(this.config, { x: this.player.col, y: this.player.row }, dx, dy, this.activeGateKeys())
   }
   pointerDown(x: number, y: number) { this.drag = { x, y }; this.dragTime = this.elapsed }
   pointerUp(x: number, y: number) {
@@ -156,6 +190,11 @@ export class NeonVaultController implements GameController {
     if (this.coins.delete(key)) { this.collectedCoins++; this.addScore(10); this.burst(node.x, node.y, '#ffe45f', 12); this.toast = 'VAULT COIN +10'; this.toastLife = 1 }
     if (this.switches.delete(key)) { const active = config.switches.length - this.switches.size; this.addScore(5); this.burst(node.x, node.y, '#19f7e7', 16); this.shake = .16; this.toast = this.switches.size ? `SWITCH ${active}/${config.switches.length} • KEEP GOING` : 'ALL SWITCHES ACTIVE'; this.toastLife = 1.6; this.options.onImpact('perfect') }
     if (key === config.shield && !this.player.shield) { this.player.shield = true; this.burst(node.x, node.y, '#6abfff', 12); this.toast = 'SHIELD READY'; this.toastLife = 1.2 }
+    if (node.prism) {
+      const previousX = this.moveDirection.x
+      if (node.prism === 'cw') { this.moveDirection.x = -this.moveDirection.y; this.moveDirection.y = previousX } else { this.moveDirection.x = this.moveDirection.y; this.moveDirection.y = -previousX }
+      this.burst(node.x, node.y, '#d968ff', 14); this.toast = `PRISM TURN • ${node.prism === 'cw' ? 'RIGHT' : 'LEFT'}`; this.toastLife = 1.1; this.options.onImpact('perfect')
+    }
     if (this.activeHazardAt(node.x, node.y)) this.danger(node.x, node.y)
     if (!this.dots.size && !this.switches.size) { this.toast = 'EXIT OPEN'; this.toastLife = 1.6 }
     if (node.x === config.exit.x && node.y === config.exit.y) { if (this.dots.size || this.switches.size) { this.toast = this.switches.size ? `${this.switches.size} SWITCHES • ${this.dots.size} SIGNALS` : `${this.dots.size} SIGNALS LEFT`; this.toastLife = 1.5 } else { this.player.moving = false; this.clearing = .72; this.burst(node.x, node.y, '#54ffe0', 24) } }
@@ -217,12 +256,21 @@ export class NeonVaultController implements GameController {
     for (const key of this.dots) { const [c, r] = key.split(',').map(Number), p = this.point(c, r); ctx.fillRect(p.x - 2, p.y - 2, 4, 4) }
     for (const key of this.coins) { const [c, r] = key.split(',').map(Number), p = this.point(c, r); ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(this.elapsed * 2); ctx.fillStyle = '#ffe45f'; ctx.shadowColor = '#ffe45f'; ctx.shadowBlur = 18; ctx.fillRect(-5, -5, 10, 10); ctx.restore() }
     for (const [key] of config.portals) { const [c, r] = key.split(',').map(Number), p = this.point(c, r); ctx.strokeStyle = key === '1,1' ? '#35d9ff' : '#bf50ff'; ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 18; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, cell * .27, this.elapsed * 2, this.elapsed * 2 + 4.8); ctx.stroke() }
+    for (const [key, turn] of config.prisms) {
+      const [c, r] = key.split(',').map(Number), p = this.point(c, r)
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(this.elapsed * .9 * (turn === 'cw' ? 1 : -1)); ctx.strokeStyle = '#e47aff'; ctx.fillStyle = 'rgba(170,44,255,.22)'; ctx.shadowColor = '#b72cff'; ctx.shadowBlur = 18; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(10, 0); ctx.lineTo(0, 10); ctx.lineTo(-10, 0); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#fff4ff'; ctx.beginPath(); ctx.moveTo(turn === 'cw' ? -3 : 3, -5); ctx.lineTo(turn === 'cw' ? 5 : -5, 0); ctx.lineTo(turn === 'cw' ? -3 : 3, 5); ctx.closePath(); ctx.fill(); ctx.restore()
+    }
+    for (const gate of config.gates) {
+      const p = this.point(gate.x, gate.y), active = this.gateActive(gate), pulse = .72 + Math.sin((this.elapsed + gate.phase) * 8) * .18
+      ctx.save(); ctx.translate(p.x, p.y); ctx.strokeStyle = active ? '#f08aff' : 'rgba(217,104,255,.32)'; ctx.fillStyle = active ? `rgba(183,44,255,${pulse})` : 'rgba(183,44,255,.08)'; ctx.shadowColor = '#d968ff'; ctx.shadowBlur = active ? 24 : 6; ctx.lineWidth = active ? 4 : 2; if (!active) ctx.setLineDash([3, 4]); ctx.strokeRect(-cell * .32, -cell * .32, cell * .64, cell * .64); ctx.fillRect(-2, -cell * .32, 4, cell * .64); ctx.setLineDash([]); ctx.restore()
+    }
     for (const key of config.switches) { const [c, r] = key.split(',').map(Number), p = this.point(c, r), active = !this.switches.has(key); ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.PI / 4); ctx.fillStyle = active ? '#19f7e7' : '#ff9f1c'; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = active ? 18 : 10; ctx.fillRect(-6, -6, 12, 12); ctx.fillStyle = palette.floor; ctx.fillRect(-2, -2, 4, 4); ctx.restore() }
-    for (const s of config.spikes) { const p = this.point(s.x, s.y), active = this.spikeActive(s); ctx.fillStyle = active ? '#19f7e7' : 'rgba(25,247,231,.2)'; ctx.shadowColor = '#00f5e1'; ctx.shadowBlur = active ? 18 : 4; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(p.x + i * 7 - 5, p.y + 8); ctx.lineTo(p.x + i * 7, p.y - (active ? 9 : 2)); ctx.lineTo(p.x + i * 7 + 5, p.y + 8); ctx.fill() } }
-    const ls = this.point(config.laser.from, config.laser.row), le = this.point(config.laser.to, config.laser.row); ctx.strokeStyle = this.laserActive() ? '#00f5df' : 'rgba(0,245,223,.28)'; ctx.lineWidth = this.laserActive() ? 5 : 2; if (!this.laserActive()) ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(ls.x - 9, ls.y); ctx.lineTo(le.x + 9, le.y); ctx.stroke(); ctx.setLineDash([])
+    const hazardColor = this.stage === 3 ? '#d968ff' : '#19f7e7', hazardDim = this.stage === 3 ? 'rgba(217,104,255,.2)' : 'rgba(25,247,231,.2)'
+    for (const s of config.spikes) { const p = this.point(s.x, s.y), active = this.spikeActive(s); ctx.fillStyle = active ? hazardColor : hazardDim; ctx.shadowColor = hazardColor; ctx.shadowBlur = active ? 18 : 4; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(p.x + i * 7 - 5, p.y + 8); ctx.lineTo(p.x + i * 7, p.y - (active ? 9 : 2)); ctx.lineTo(p.x + i * 7 + 5, p.y + 8); ctx.fill() } }
+    const ls = this.point(config.laser.from, config.laser.row), le = this.point(config.laser.to, config.laser.row); ctx.strokeStyle = this.laserActive() ? hazardColor : hazardDim; ctx.shadowColor = hazardColor; ctx.shadowBlur = this.laserActive() ? 16 : 3; ctx.lineWidth = this.laserActive() ? 5 : 2; if (!this.laserActive()) ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(ls.x - 9, ls.y); ctx.lineTo(le.x + 9, le.y); ctx.stroke(); ctx.setLineDash([])
     const [shieldCol, shieldRow] = config.shield.split(',').map(Number), shield = this.point(shieldCol, shieldRow); if (!this.player.shield) { ctx.strokeStyle = '#3377ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(shield.x, shield.y, 7, .3, 2.8); ctx.arc(shield.x, shield.y, 7, 3.5, 5.9); ctx.stroke() }
     const exit = this.point(config.exit.x, config.exit.y), open = !this.dots.size && !this.switches.size; ctx.strokeStyle = open ? '#16c79a' : '#a52b55'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(exit.x, exit.y, 10, this.elapsed * 2, this.elapsed * 2 + 5); ctx.stroke(); if (!open) { ctx.fillStyle = '#ff3b7f'; ctx.font = '800 7px system-ui'; ctx.textAlign = 'center'; ctx.fillText(String(this.dots.size + this.switches.size), exit.x, exit.y + 3) }
-    const enemy = this.point(this.enemy.x, config.enemy.row); ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(this.elapsed + .8); ctx.fillStyle = this.stage === 1 ? '#16f5e6' : '#ff4f8b'; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 20; ctx.fillRect(-7, -7, 14, 14); ctx.fillStyle = palette.floor; ctx.fillRect(-3, -3, 6, 6); ctx.restore()
+    const enemy = this.point(this.enemy.x, config.enemy.row); ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(this.elapsed + .8); ctx.fillStyle = this.stage === 1 ? '#16f5e6' : this.stage === 2 ? '#ff4f8b' : '#d968ff'; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 20; ctx.fillRect(-7, -7, 14, 14); ctx.fillStyle = palette.floor; ctx.fillRect(-3, -3, 6, 6); ctx.restore()
     for (const t of this.trail) { const p = this.point(t.x, t.y); ctx.globalAlpha = t.life; ctx.fillStyle = '#f4ff2d'; ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill() } ctx.globalAlpha = 1
     for (const q of this.particles) { const p = this.point(q.x - .5, q.y - .5); ctx.globalAlpha = clamp(q.life * 2, 0, 1); ctx.fillStyle = q.color; ctx.fillRect(p.x, p.y, 4, 4) } ctx.globalAlpha = 1
     if (this.dying <= 0) {
