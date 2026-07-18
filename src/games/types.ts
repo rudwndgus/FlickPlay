@@ -53,9 +53,12 @@ export interface MiniGameModule {
   fullDescription: string
   icon: string
   category: string
+  objective: string
   theme: GameTheme
   controls: GameControlGuide[]
   scoringRules: ScoringRule[]
+  failureConditions: string[]
+  tips: string[]
   createController(options: ControllerOptions): GameController
 }
 
