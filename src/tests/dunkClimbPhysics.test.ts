@@ -17,6 +17,8 @@ type DunkController = GameController & {
   scoreLabel: string
   lastShotPoints: number
   launchRimArmed: boolean
+  shotPower: number
+  getAimTrajectory: () => Array<{ x: number; y: number }>
   getRimGeometry: (hoop: DunkController['targetHoop']) => { left: { x: number; y: number }; right: { x: number; y: number }; tubeRadius: number }
   collideWithRims: (hoop: DunkController['targetHoop']) => void
 }
@@ -42,10 +44,29 @@ describe('Dunk Climb physics', () => {
 
     controller.pointerUp(start.x + 30, start.y + 120)
     expect(controller.ball.flying).toBe(true)
-    expect(controller.ball.vx).toBeLessThan(0)
-    expect(controller.ball.vy).toBeLessThan(0)
+    expect(controller.shotPower).toBe(6.8)
+    expect(controller.ball.vx).toBeCloseTo(-30 * controller.shotPower, 5)
+    expect(controller.ball.vy).toBeCloseTo(-120 * controller.shotPower, 5)
     expect(controller.launchHoop.netPunch).toBe(1)
     expect(controller.launchRimArmed).toBe(false)
+  })
+
+  it('previews the reflected route after a side-wall bounce', () => {
+    const { controller } = makeController()
+    const start = { x: controller.ball.x, y: controller.ball.y }
+    controller.pointerDown(start.x, start.y)
+    controller.pointerMove(start.x + 140, start.y + 20)
+
+    const trajectory = controller.getAimTrajectory()
+    const xs = trajectory.map((point) => point.x)
+    const lowestIndex = xs.indexOf(Math.min(...xs))
+
+    expect(trajectory).toHaveLength(108)
+    expect(xs.every((x) => x >= controller.ball.r && x <= 390 - controller.ball.r)).toBe(true)
+    expect(xs[lowestIndex]).toBe(controller.ball.r)
+    expect(lowestIndex).toBeGreaterThan(0)
+    expect(lowestIndex).toBeLessThan(xs.length - 1)
+    expect(xs.at(-1)).toBeGreaterThan(xs[lowestIndex])
   })
 
   it('ignores the launch rim while the fired ball is exiting upward', () => {
