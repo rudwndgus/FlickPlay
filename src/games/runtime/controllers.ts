@@ -1224,7 +1224,7 @@ class PerfectStackController extends BaseController {
     ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(231,229,255,.66)'; ctx.font = '800 9px system-ui'; ctx.fillText('FLOOR', 34, 79); ctx.fillStyle = '#fff'; ctx.font = '900 27px system-ui'; ctx.fillText(String(this.score), 33, 109)
     ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(231,229,255,.66)'; ctx.font = '800 9px system-ui'; ctx.fillText('BLOCK WIDTH', this.w - 34, 79); ctx.fillStyle = '#ffe486'; ctx.font = '900 20px system-ui'; ctx.fillText(`${Math.max(1, Math.round(this.current.width / 220 * 100))}%`, this.w - 33, 106)
     if (this.feedbackLife > 0) { const alpha = Math.min(1, this.feedbackLife * 2.6), pulse = 1 + Math.sin((1.2 - this.feedbackLife) * 10) * .03; ctx.save(); ctx.globalAlpha = alpha; ctx.translate(this.w / 2, 158); ctx.scale(pulse, pulse); ctx.textAlign = 'center'; ctx.fillStyle = this.perfect > 0 ? '#fff1a0' : '#dfe3ff'; ctx.shadowColor = this.perfect > 0 ? '#ffb85c' : '#879bff'; ctx.shadowBlur = this.perfect > 0 ? 20 : 10; ctx.font = this.perfect > 0 ? '950 25px system-ui' : '850 13px system-ui'; ctx.fillText(this.feedback, 0, 0); ctx.restore() }
-    drawGameLabel(ctx, 'TAP TO DROP', `${this.score} floors`, this.w, this.h)
+    drawGameLabel(ctx, 'TAP TO DROP', `${this.score} floors`, this.w, this.h, 32)
   }
 }
 
@@ -1233,26 +1233,38 @@ class PinCoreController extends BaseController {
   private speed = 1.1
   private pins: number[] = []
   private shot = 0
+  private stickPulse = 0
   private autoClock = 0
-  reset() { this.rotation = 0; this.speed = 1.15; this.pins = [Math.PI * .45, Math.PI * 1.55]; this.shot = 0; this.autoClock = 0 }
+  reset() { this.rotation = 0; this.speed = 1.15; this.pins = [0, Math.PI]; this.shot = 0; this.stickPulse = 0; this.autoClock = 0 }
   constructor(theme: GameTheme, options: ControllerOptions) { super(theme, options); this.reset() }
   pointerDown() {
-    if (this.shot > 0) return
+    if (this.shot > 0 || this.status !== 'playing') return
+    this.shot = .001; this.options.onImpact('tap')
+  }
+  private completeShot() {
     const incoming = Math.PI / 2 - this.rotation
     const minGap = this.pins.length ? Math.min(...this.pins.map((p) => Math.abs(Math.atan2(Math.sin(p - incoming), Math.cos(p - incoming))))) : Math.PI
-    if (minGap < .24) { this.shot = .01; setTimeout(() => this.finish(), 150); return }
-    this.pins.push(incoming); this.shot = .01; this.addScore(1); if (minGap < .42) this.options.onImpact('perfect'); this.speed = (1.1 + this.score * .055) * (Math.floor(this.score / 7) % 2 ? -1 : 1)
+    this.shot = 0
+    if (minGap < .24) { this.finish(); return }
+    this.pins.push(incoming); this.stickPulse = 1; this.addScore(1); if (minGap < .42) this.options.onImpact('perfect'); this.speed = (1.1 + this.score * .055) * (Math.floor(this.score / 7) % 2 ? -1 : 1)
   }
-  autopilot() { const incoming = Math.PI / 2 - this.rotation; const gap = Math.min(...this.pins.map((p) => Math.abs(Math.atan2(Math.sin(p - incoming), Math.cos(p - incoming))))); if (gap > .5) this.pointerDown() }
-  tick(dt: number) { this.rotation += this.speed * dt; this.shot = Math.max(0, this.shot - dt * 2.6); if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .22) { this.autoClock = 0; this.autopilot() } } }
+  autopilot() { if (this.shot > 0) return; const predictedRotation = this.rotation + this.speed * .2, incoming = Math.PI / 2 - predictedRotation; const gap = Math.min(...this.pins.map((p) => Math.abs(Math.atan2(Math.sin(p - incoming), Math.cos(p - incoming))))); if (gap > .5) this.pointerDown() }
+  tick(dt: number) {
+    this.rotation += this.speed * dt; this.stickPulse = Math.max(0, this.stickPulse - dt * 5)
+    if (this.shot > 0) { this.shot = Math.min(1, this.shot + dt * 5); if (this.shot >= 1) this.completeShot() }
+    if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .22) { this.autoClock = 0; this.autopilot() } }
+  }
   render(ctx: CanvasRenderingContext2D) {
     this.paintBackdrop(ctx, '#24262b', '#08090b')
     const cx = this.w / 2, cy = this.h * .41, radius = Math.min(this.w * .24, 92)
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(this.rotation)
     for (const angle of this.pins) { ctx.save(); ctx.rotate(angle); ctx.strokeStyle = '#f5f2dc'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(radius - 4, 0); ctx.lineTo(radius + 72, 0); ctx.stroke(); ctx.fillStyle = this.theme.accent; ctx.beginPath(); ctx.arc(radius + 76, 0, 8, 0, Math.PI * 2); ctx.fill(); ctx.restore() }
     ctx.fillStyle = '#f7e744'; ctx.shadowColor = '#f7e744'; ctx.shadowBlur = 25; ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#15161a'; ctx.font = '900 34px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(Math.max(0, 12 - this.score % 12)), 0, 0); ctx.restore(); ctx.shadowBlur = 0
-    const launchY = this.h - 150 - this.shot * 500; ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx, launchY + 55); ctx.lineTo(cx, launchY); ctx.stroke(); ctx.fillStyle = this.theme.accent; ctx.beginPath(); ctx.arc(cx, launchY + 60, 9, 0, Math.PI * 2); ctx.fill()
-    drawGameLabel(ctx, 'TAP THE GAP', `${this.score} pins`, this.w, this.h)
+    const easedShot = this.shot > 0 ? 1 - Math.pow(1 - this.shot, 3) : 0, startHandleY = this.h - 102, contactHandleY = cy + radius + 76, handleY = startHandleY + (contactHandleY - startHandleY) * easedShot
+    if (this.shot > 0) { ctx.strokeStyle = 'rgba(255,255,255,.13)'; ctx.lineWidth = 3; for (let trail = 1; trail <= 3; trail++) { ctx.globalAlpha = (1 - easedShot) * (.34 - trail * .07); ctx.beginPath(); ctx.moveTo(cx, handleY + trail * 13); ctx.lineTo(cx, handleY + trail * 13 + 22); ctx.stroke() } ctx.globalAlpha = 1 }
+    ctx.strokeStyle = '#fff'; ctx.shadowColor = this.shot > 0 ? 'rgba(255,255,255,.5)' : 'transparent'; ctx.shadowBlur = this.shot > 0 ? 12 : 0; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx, handleY - 80); ctx.lineTo(cx, handleY - 8); ctx.stroke(); ctx.fillStyle = this.theme.accent; ctx.shadowColor = this.theme.accent; ctx.shadowBlur = this.shot > 0 ? 18 : 7; ctx.beginPath(); ctx.arc(cx, handleY, 9, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0
+    if (this.stickPulse > 0) { ctx.globalAlpha = this.stickPulse; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, contactHandleY, 10 + (1 - this.stickPulse) * 18, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1 }
+    drawGameLabel(ctx, 'TAP THE GAP', `${this.score} pins`, this.w, this.h, 32)
   }
 }
 
@@ -1309,8 +1321,8 @@ const drawBasketball = (ctx: CanvasRenderingContext2D, x: number, y: number, r: 
   ctx.strokeStyle = '#6f271f'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.moveTo(0, -r); ctx.bezierCurveTo(-r * .55, -r * .2, -r * .55, r * .2, 0, r); ctx.moveTo(0, -r); ctx.bezierCurveTo(r * .55, -r * .2, r * .55, r * .2, 0, r); ctx.stroke(); ctx.restore()
 }
 
-const drawGameLabel = (ctx: CanvasRenderingContext2D, hint: string, metric: string, w: number, h: number) => {
-  ctx.save(); ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.76)'; ctx.font = '700 11px system-ui'; ctx.letterSpacing = '2px'; ctx.fillText(hint, w / 2, h - 108); ctx.fillStyle = '#fff'; ctx.font = '800 18px system-ui'; ctx.fillText(metric, w / 2, h - 80); ctx.restore()
+const drawGameLabel = (ctx: CanvasRenderingContext2D, hint: string, metric: string, w: number, h: number, bottomOffset = 80) => {
+  ctx.save(); ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.76)'; ctx.font = '700 11px system-ui'; ctx.letterSpacing = '2px'; ctx.fillText(hint, w / 2, h - bottomOffset - 28); ctx.fillStyle = '#fff'; ctx.font = '800 18px system-ui'; ctx.fillText(metric, w / 2, h - bottomOffset); ctx.restore()
 }
 
 export function createController(id: string, theme: GameTheme, options: ControllerOptions): GameController {
