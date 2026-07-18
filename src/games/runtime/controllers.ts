@@ -1127,22 +1127,40 @@ class CrossingRushController extends BaseController {
 class NeonEscapeController extends NeonVaultController {}
 
 type StackBlock = { x: number; y: number; width: number; color: string }
+type StackSpark = Point & { vx: number; vy: number; life: number; size: number; color: string }
 class PerfectStackController extends BaseController {
   private blocks: StackBlock[] = []
   private current = { x: 0, y: 0, width: 220, dir: 1, speed: 150 }
   private fragment: (StackBlock & { vy: number; rotation: number }) | null = null
   private perfect = 0
   private autoClock = 0
-  reset() { this.blocks = [{ x: this.w / 2 - 110, y: this.h - 130, width: 220, color: '#fff1a8' }]; this.current = { x: 0, y: this.h - 176, width: 220, dir: 1, speed: 145 }; this.fragment = null; this.perfect = 0; this.autoClock = 0 }
+  private perfectPulse = 0
+  private placementPulse = 0
+  private feedback = 'CENTER THE BLOCK'
+  private feedbackLife = 1.8
+  private sparks: StackSpark[] = []
+  reset() {
+    this.blocks = [{ x: this.w / 2 - 110, y: this.h - 130, width: 220, color: '#fff1a8' }]
+    this.current = { x: 0, y: this.h - 176, width: 220, dir: 1, speed: 145 }; this.fragment = null; this.perfect = 0; this.autoClock = 0; this.perfectPulse = 0; this.placementPulse = 0; this.feedback = 'CENTER THE BLOCK'; this.feedbackLife = 1.8; this.sparks = []
+  }
   constructor(theme: GameTheme, options: ControllerOptions) { super(theme, options); this.reset() }
+  private burst(x: number, y: number, perfect: boolean) {
+    const colors = perfect ? ['#fff7ae', '#ffd86b', '#ff91d0', '#8cf8ff'] : ['#d9dcff', '#91a3ff']
+    const count = perfect ? 24 : 9
+    for (let i = 0; i < count; i++) {
+      const angle = Math.PI * 2 * i / count, speed = (perfect ? 75 : 38) + i % 5 * 18
+      this.sparks.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - (perfect ? 35 : 10), life: .55 + i % 4 * .09, size: perfect ? 2.5 + i % 3 : 2, color: colors[i % colors.length] })
+    }
+  }
   pointerDown() {
     const base = this.blocks[this.blocks.length - 1], left = Math.max(this.current.x, base.x), right = Math.min(this.current.x + this.current.width, base.x + base.width), overlap = right - left
     if (overlap <= 0) { this.finish(); return }
     const diff = this.current.x - base.x, perfect = Math.abs(diff) <= base.width * .04
     const placedWidth = perfect ? Math.min(220, base.width + (this.perfect >= 1 ? 7 : 0)) : overlap, placedX = perfect ? base.x - Math.max(0, placedWidth - base.width) / 2 : left
     if (!perfect && Math.abs(diff) > 2) { const cutX = diff > 0 ? base.x + base.width : this.current.x; this.fragment = { x: cutX, y: this.current.y, width: this.current.width - overlap, color: this.color(), vy: 0, rotation: 0 } }
-    this.perfect = perfect ? this.perfect + 1 : 0; this.blocks.push({ x: placedX, y: this.current.y, width: placedWidth, color: this.color() }); this.addScore(1)
-    if (perfect) this.options.onImpact('perfect')
+    this.perfect = perfect ? this.perfect + 1 : 0; this.blocks.push({ x: placedX, y: this.current.y, width: placedWidth, color: this.color() }); this.addScore(1); this.placementPulse = 1
+    if (perfect) { this.perfectPulse = 1; this.feedback = this.perfect > 1 ? `PERFECT ×${this.perfect}` : 'PERFECT'; this.feedbackLife = 1.15; this.burst(placedX + placedWidth / 2, this.current.y + 20, true); this.options.onImpact('perfect') }
+    else { const accuracy = overlap / Math.max(1, base.width); this.feedback = accuracy > .86 ? 'GREAT DROP' : accuracy > .62 ? 'NICE' : 'STAY CENTERED'; this.feedbackLife = .72; this.burst(placedX + placedWidth / 2, this.current.y + 20, false) }
     this.current = { x: this.score % 2 ? 0 : this.w - placedWidth, y: this.current.y - 46, width: placedWidth, dir: this.score % 2 ? 1 : -1, speed: Math.min(270, 145 + this.score * 9) }
   }
   private color() { return `hsl(${235 + this.score * 13}, 82%, 72%)` }
@@ -1150,16 +1168,38 @@ class PerfectStackController extends BaseController {
   tick(dt: number) {
     this.current.x += this.current.speed * this.current.dir * dt; if (this.current.x < -20 || this.current.x + this.current.width > this.w + 20) this.current.dir *= -1
     if (this.fragment) { this.fragment.vy += 700 * dt; this.fragment.y += this.fragment.vy * dt; this.fragment.rotation += dt * 2; if (this.fragment.y > this.h + 100) this.fragment = null }
+    this.perfectPulse = Math.max(0, this.perfectPulse - dt * 1.75); this.placementPulse = Math.max(0, this.placementPulse - dt * 5); this.feedbackLife = Math.max(0, this.feedbackLife - dt)
+    this.sparks.forEach((spark) => { spark.x += spark.vx * dt; spark.y += spark.vy * dt; spark.vy += 125 * dt; spark.life -= dt }); this.sparks = this.sparks.filter((spark) => spark.life > 0)
     if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .2) { this.autoClock = 0; this.autopilot() } }
   }
   render(ctx: CanvasRenderingContext2D) {
-    const hue = 225 + Math.min(80, this.score * 5), gradient = ctx.createLinearGradient(0, 0, 0, this.h); gradient.addColorStop(0, `hsl(${hue},75%,72%)`); gradient.addColorStop(1, '#313475'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, this.w, this.h)
-    ctx.fillStyle = 'rgba(255,255,255,.22)'; for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.ellipse((i * 91 + 30) % this.w, 120 + (i % 3) * 110, 55, 18, 0, 0, Math.PI * 2); ctx.fill() }
+    const hue = 244 + Math.min(55, this.score * 3.5), gradient = ctx.createLinearGradient(0, 0, 0, this.h); gradient.addColorStop(0, '#11152f'); gradient.addColorStop(.48, `hsl(${hue},55%,35%)`); gradient.addColorStop(1, '#39204f'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, this.w, this.h)
+    const moonGlow = ctx.createRadialGradient(this.w * .78, this.h * .2, 2, this.w * .78, this.h * .2, 82); moonGlow.addColorStop(0, 'rgba(255,245,190,.42)'); moonGlow.addColorStop(.2, 'rgba(255,220,165,.2)'); moonGlow.addColorStop(1, 'rgba(255,180,220,0)'); ctx.fillStyle = moonGlow; ctx.fillRect(0, 0, this.w, this.h * .42)
+    ctx.fillStyle = '#fff2c5'; ctx.shadowColor = '#ffdca8'; ctx.shadowBlur = 24; ctx.beginPath(); ctx.arc(this.w * .78, this.h * .2, 18, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0
+    for (let i = 0; i < 34; i++) { const x = (i * 83 + 29) % this.w, y = 105 + (i * 47) % Math.max(120, this.h * .47), alpha = .25 + (Math.sin(this.elapsed * 2.2 + i * 1.7) + 1) * .25; ctx.globalAlpha = alpha; ctx.fillStyle = i % 5 ? '#fff' : '#9cf7ff'; ctx.fillRect(x, y, i % 7 ? 1.5 : 2.5, i % 7 ? 1.5 : 2.5) } ctx.globalAlpha = 1
+    ctx.fillStyle = 'rgba(255,255,255,.08)'; for (let i = 0; i < 5; i++) { const x = ((i * 113 + 25) + this.elapsed * (2 + i % 2)) % (this.w + 150) - 75; ctx.beginPath(); ctx.ellipse(x, 220 + (i % 3) * 105, 52 + i * 4, 12 + i % 2 * 5, 0, 0, Math.PI * 2); ctx.fill() }
+    ctx.fillStyle = 'rgba(16,12,42,.42)'; for (let i = 0; i < 13; i++) { const buildingWidth = 25 + i % 3 * 9, buildingHeight = 48 + (i * 31) % 100, x = i * (this.w / 12) - 8; ctx.fillRect(x, this.h - 112 - buildingHeight, buildingWidth, buildingHeight); ctx.fillStyle = 'rgba(255,221,126,.16)'; for (let windowY = this.h - 102 - buildingHeight; windowY < this.h - 125; windowY += 18) ctx.fillRect(x + 7 + i % 2 * 4, windowY, 3, 5); ctx.fillStyle = 'rgba(16,12,42,.42)' }
     const camera = Math.max(0, this.blocks.length * 46 - (this.h - 260))
-    const drawBlock = (b: StackBlock) => { const y = b.y + camera; ctx.fillStyle = b.color; ctx.shadowColor = 'rgba(20,20,70,.25)'; ctx.shadowBlur = 16; roundedRect(ctx, b.x, y, b.width, 40, 7); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.26)'; ctx.fillRect(b.x + 5, y + 4, b.width - 10, 5); ctx.shadowBlur = 0 }
-    this.blocks.forEach(drawBlock); drawBlock({ x: this.current.x, y: this.current.y, width: this.current.width, color: '#ffda72' })
-    if (this.fragment) { ctx.save(); ctx.translate(this.fragment.x + this.fragment.width / 2, this.fragment.y + camera); ctx.rotate(this.fragment.rotation); drawBlock({ ...this.fragment, x: -this.fragment.width / 2, y: -20 }); ctx.restore() }
-    if (this.perfect > 0) { ctx.font = '800 26px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff8c9'; ctx.fillText(`PERFECT ×${this.perfect}`, this.w / 2, 140) }
+    const base = this.blocks[this.blocks.length - 1], baseY = base.y + camera, currentY = this.current.y + camera
+    ctx.save(); ctx.setLineDash([4, 7]); ctx.strokeStyle = `rgba(255,240,168,${.16 + Math.sin(this.elapsed * 4) * .05})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(base.x, currentY + 19); ctx.lineTo(base.x, baseY + 20); ctx.moveTo(base.x + base.width, currentY + 19); ctx.lineTo(base.x + base.width, baseY + 20); ctx.stroke(); ctx.setLineDash([]); ctx.restore()
+    const drawBlock = (b: StackBlock, active = false, offsetY = camera) => {
+      const y = b.y + offsetY, depth = Math.min(9, Math.max(3, b.width * .08)), radius = Math.min(8, Math.max(2, b.width / 2)); ctx.save()
+      ctx.shadowColor = active ? 'rgba(255,213,102,.7)' : 'rgba(10,8,35,.42)'; ctx.shadowBlur = active ? 24 + Math.sin(this.elapsed * 7) * 5 : 14; ctx.shadowOffsetY = 7
+      ctx.fillStyle = 'rgba(14,10,43,.45)'; ctx.beginPath(); ctx.moveTo(b.x + 2, y + 40); ctx.lineTo(b.x + b.width, y + 40); ctx.lineTo(b.x + b.width - depth, y + 40 + depth); ctx.lineTo(b.x + depth, y + 40 + depth); ctx.closePath(); ctx.fill()
+      const face = ctx.createLinearGradient(b.x, y, b.x + b.width, y + 40); face.addColorStop(0, active ? '#ffbd59' : b.color); face.addColorStop(.5, active ? '#ffe58a' : b.color); face.addColorStop(1, active ? '#ff9f72' : b.color); ctx.fillStyle = face; roundedRect(ctx, b.x, y, b.width, 40, radius); ctx.fill(); ctx.shadowBlur = 0; ctx.shadowOffsetY = 0
+      ctx.fillStyle = active ? 'rgba(255,255,225,.7)' : 'rgba(255,255,255,.32)'; roundedRect(ctx, b.x + Math.min(5, b.width * .1), y + 4, Math.max(1, b.width - Math.min(10, b.width * .2)), 5, 2); ctx.fill()
+      ctx.strokeStyle = active ? 'rgba(255,250,204,.7)' : 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; roundedRect(ctx, b.x + .5, y + .5, Math.max(1, b.width - 1), 39, radius); ctx.stroke(); ctx.restore()
+    }
+    if (this.blocks.length === 1) { ctx.fillStyle = 'rgba(8,7,25,.3)'; ctx.beginPath(); ctx.ellipse(this.w / 2, this.h - 82, 132, 20, 0, 0, Math.PI * 2); ctx.fill() }
+    this.blocks.forEach((block) => drawBlock(block, false)); drawBlock({ x: this.current.x, y: this.current.y, width: this.current.width, color: '#ffda72' }, true)
+    if (this.fragment) { ctx.save(); ctx.translate(this.fragment.x + this.fragment.width / 2, this.fragment.y + camera + 20); ctx.rotate(this.fragment.rotation); drawBlock({ ...this.fragment, x: -this.fragment.width / 2, y: -20 }, false, 0); ctx.restore() }
+    for (const spark of this.sparks) { ctx.globalAlpha = clamp(spark.life * 2, 0, 1); ctx.fillStyle = spark.color; ctx.shadowColor = spark.color; ctx.shadowBlur = 8; ctx.beginPath(); ctx.arc(spark.x, spark.y + camera, spark.size, 0, Math.PI * 2); ctx.fill() } ctx.globalAlpha = 1; ctx.shadowBlur = 0
+    if (this.placementPulse > 0) { const placed = this.blocks[this.blocks.length - 1], y = placed.y + camera + 20; ctx.globalAlpha = this.placementPulse * .55; ctx.strokeStyle = '#fff4b1'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(placed.x + placed.width / 2, y, placed.width * (.5 + (1 - this.placementPulse) * .2), 19 + (1 - this.placementPulse) * 14, 0, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1 }
+    if (this.perfectPulse > 0) { const glow = ctx.createRadialGradient(this.w / 2, this.h * .45, 0, this.w / 2, this.h * .45, this.w * .7); glow.addColorStop(0, `rgba(255,235,144,${this.perfectPulse * .18})`); glow.addColorStop(1, 'rgba(255,133,216,0)'); ctx.fillStyle = glow; ctx.fillRect(0, 0, this.w, this.h) }
+    ctx.fillStyle = 'rgba(12,10,38,.62)'; ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; roundedRect(ctx, 18, 58, this.w - 36, 68, 18); ctx.fill(); ctx.stroke()
+    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(231,229,255,.66)'; ctx.font = '800 9px system-ui'; ctx.fillText('FLOOR', 34, 79); ctx.fillStyle = '#fff'; ctx.font = '900 27px system-ui'; ctx.fillText(String(this.score), 33, 109)
+    ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(231,229,255,.66)'; ctx.font = '800 9px system-ui'; ctx.fillText('BLOCK WIDTH', this.w - 34, 79); ctx.fillStyle = '#ffe486'; ctx.font = '900 20px system-ui'; ctx.fillText(`${Math.max(1, Math.round(this.current.width / 220 * 100))}%`, this.w - 33, 106)
+    if (this.feedbackLife > 0) { const alpha = Math.min(1, this.feedbackLife * 2.6), pulse = 1 + Math.sin((1.2 - this.feedbackLife) * 10) * .03; ctx.save(); ctx.globalAlpha = alpha; ctx.translate(this.w / 2, 158); ctx.scale(pulse, pulse); ctx.textAlign = 'center'; ctx.fillStyle = this.perfect > 0 ? '#fff1a0' : '#dfe3ff'; ctx.shadowColor = this.perfect > 0 ? '#ffb85c' : '#879bff'; ctx.shadowBlur = this.perfect > 0 ? 20 : 10; ctx.font = this.perfect > 0 ? '950 25px system-ui' : '850 13px system-ui'; ctx.fillText(this.feedback, 0, 0); ctx.restore() }
     drawGameLabel(ctx, 'TAP TO DROP', `${this.score} floors`, this.w, this.h)
   }
 }
