@@ -42,7 +42,7 @@ export function App() {
   }
 
   const share = async (game: MiniGameModule) => {
-    const data = { title: `${game.title} · FlickPlay!`, text: `${game.shortDescription} 내 기록에 도전해보세요!`, url: window.location.href }
+    const data = { title: `${game.title} · Flicko`, text: `${game.shortDescription} 내 기록에 도전해보세요!`, url: window.location.href }
     try { if (navigator.share) await navigator.share(data); else { await navigator.clipboard.writeText(window.location.href); window.alert('게임 링크를 복사했어요.') } } catch { /* user cancelled */ }
   }
 

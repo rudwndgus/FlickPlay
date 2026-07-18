@@ -3,9 +3,10 @@ import { APP_CONFIG } from '../app/appConfig'
 import { APP_VERSION, UPDATE_INFO } from '../app/appVersion'
 
 describe('app configuration', () => {
-  it('keeps FlickPlay branding centralized', () => {
-    expect(APP_CONFIG.name).toBe('FlickPlay!')
-    expect(APP_CONFIG.storageKey).toContain('flickplay')
+  it('keeps Flicko branding centralized', () => {
+    expect(APP_CONFIG.name).toBe('Flicko')
+    expect(APP_CONFIG.storageKey).toBe('flicko-state-v1')
+    expect(APP_CONFIG.legacyStorageKeys).toContain('flickplay-state-v1')
   })
 
   it('publishes versioned update information', () => {

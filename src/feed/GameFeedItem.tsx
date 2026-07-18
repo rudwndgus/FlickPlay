@@ -13,7 +13,7 @@ export function GameFeedItem({ game, index, total, active, current, liked, bookm
       {active ? <GameCanvas game={game} preview active={current} /> : <div className="preview-placeholder" style={{ background: `linear-gradient(150deg, ${game.theme.background}, ${game.theme.surface})` }} />}
       <div className="feed-vignette" />
       <header className="feed-topbar">
-        <button className="brand" aria-label="FlickPlay 홈"><span className="brand-bolt">F</span><span>FlickPlay!</span></button>
+        <button className="brand" aria-label="플릭코 홈"><span className="brand-bolt">F</span><span>Flicko</span></button>
         <div className="feed-progress"><span>{String(index + 1).padStart(2, '0')}</span><i><b style={{ width: `${((index + 1) / total) * 100}%` }} /></i><span>{String(total).padStart(2, '0')}</span></div>
         <button className="circle-button" onClick={onToggleMute} aria-label={muted ? '소리 켜기' : '소리 끄기'}>{muted ? <VolumeX size={19} /> : <Volume2 size={19} />}</button>
       </header>

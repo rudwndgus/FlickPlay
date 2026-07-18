@@ -10,8 +10,8 @@ export default defineConfig(({ mode }) => ({
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'apple-touch-icon.svg'],
       manifest: {
-        name: 'FlickPlay!',
-        short_name: 'FlickPlay!',
+        name: 'Flicko | 플릭코',
+        short_name: 'Flicko',
         description: '넘기고, 발견하고, 바로 플레이하는 세로형 미니게임 피드',
         theme_color: '#0a0b12',
         background_color: '#0a0b12',

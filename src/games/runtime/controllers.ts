@@ -1153,6 +1153,6 @@ export function createController(id: string, theme: GameTheme, options: Controll
     case 'perfect-stack': return new PerfectStackController(theme, options)
     case 'pin-core': return new PinCoreController(theme, options)
     case 'pocket-golf': return new PocketGolfController(theme, options)
-    default: throw new Error(`Unknown FlickPlay game: ${id}`)
+    default: throw new Error(`Unknown Flicko game: ${id}`)
   }
 }
