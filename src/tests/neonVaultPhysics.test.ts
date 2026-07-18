@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { gameRegistry } from '../games/registry'
 import type { GameController } from '../games/types'
-import { analyzeVaultReachability, NEON_VAULT_MAP, NEON_VAULT_STAGE_TWO_MAP } from '../games/runtime/NeonVaultController'
+import { analyzeVaultReachability, NEON_VAULT_MAP, NEON_VAULT_STAGE_THREE_MAP, NEON_VAULT_STAGE_TWO_MAP } from '../games/runtime/NeonVaultController'
 
 type VaultController = GameController & {
   player: { col: number; row: number; x: number; y: number; moving: boolean; shield: boolean }
@@ -14,7 +14,7 @@ type VaultController = GameController & {
   shieldGrace: number
   enemy: { x: number; y: number; direction: number }
   stage: number
-  buildPath: (dx: number, dy: number) => { x: number; y: number; teleport?: boolean }[]
+  buildPath: (dx: number, dy: number) => { x: number; y: number; teleport?: boolean; prism?: 'cw' | 'ccw' }[]
   visit: (node: { x: number; y: number }) => void
   danger: (x: number, y: number) => void
 }
@@ -35,6 +35,15 @@ const enterStageTwo = (controller: VaultController) => {
   expect(controller.stage).toBe(2)
 }
 
+const enterStageThree = (controller: VaultController) => {
+  enterStageTwo(controller)
+  controller.dots.clear()
+  controller.switches.clear()
+  controller.visit({ x: 1, y: 1 })
+  for (let i = 0; i < 24; i++) controller.update(.033)
+  expect(controller.stage).toBe(3)
+}
+
 describe('Neon Vault movement', () => {
   it('uses a dense portrait maze with consistent row widths', () => {
     expect(NEON_VAULT_MAP).toHaveLength(19)
@@ -43,6 +52,9 @@ describe('Neon Vault movement', () => {
     expect(NEON_VAULT_STAGE_TWO_MAP).toHaveLength(19)
     expect(NEON_VAULT_STAGE_TWO_MAP.every((row) => row.length === 13)).toBe(true)
     expect(NEON_VAULT_STAGE_TWO_MAP.join('').split('0').length - 1).toBeGreaterThan(110)
+    expect(NEON_VAULT_STAGE_THREE_MAP).toHaveLength(19)
+    expect(NEON_VAULT_STAGE_THREE_MAP.every((row) => row.length === 13)).toBe(true)
+    expect(NEON_VAULT_STAGE_THREE_MAP.join('').split('0').length - 1).toBeGreaterThan(110)
   })
 
   it('makes every required signal reachable and always allows a route back to the exit', () => {
@@ -192,6 +204,33 @@ describe('Neon Vault movement', () => {
     expect(path.at(-1)).toMatchObject({ x: 5, y: 1 })
   })
 
+  it('turns a slide ninety degrees when it crosses a violet prism', () => {
+    const { controller } = makeController()
+    enterStageThree(controller)
+    controller.elapsed = 1.3
+    controller.player = { col: 1, row: 7, x: 1, y: 7, moving: false, shield: false }
+    const path = controller.buildPath(1, 0)
+    expect(path).toContainEqual(expect.objectContaining({ x: 7, y: 7, prism: 'cw' }))
+    expect(path.at(-1)).toMatchObject({ x: 7, y: 11 })
+  })
+
+  it('uses a pulse gate as a timed wall and a live collision hazard', () => {
+    const { controller } = makeController()
+    enterStageThree(controller)
+    controller.elapsed = 0
+    controller.player = { col: 1, row: 7, x: 1, y: 7, moving: false, shield: false }
+    expect(controller.buildPath(1, 0).at(-1)).toMatchObject({ x: 4, y: 7 })
+
+    controller.elapsed = 1.3
+    expect(controller.buildPath(1, 0).at(-1)).toMatchObject({ x: 7, y: 11 })
+
+    controller.elapsed = 0
+    controller.player = { col: 5, row: 7, x: 5, y: 7, moving: false, shield: false }
+    controller.enemy = { x: 1.4, y: 7, direction: 1 }
+    controller.update(.001)
+    expect(controller.dying).toBeGreaterThan(0)
+  })
+
   it('keeps the vault locked until both switches and every signal are cleared', () => {
     const { controller } = makeController()
     controller.dots.clear()
@@ -205,7 +244,7 @@ describe('Neon Vault movement', () => {
     expect(controller.clearing).toBeGreaterThan(0)
   })
 
-  it('opens a solvable mint stage after stage one and only finishes at its exit', () => {
+  it('opens solvable mint and violet stages and only finishes at the third exit', () => {
     const { controller, onFinish } = makeController()
     enterStageTwo(controller)
 
@@ -221,6 +260,20 @@ describe('Neon Vault movement', () => {
     controller.dots.clear()
     controller.switches.clear()
     controller.visit({ x: 1, y: 1 })
+    for (let i = 0; i < 24; i++) controller.update(.033)
+    expect(controller.stage).toBe(3)
+    expect(controller.getStatus()).toBe('playing')
+    expect(onFinish).not.toHaveBeenCalled()
+
+    const violetAnalysis = analyzeVaultReachability(3)
+    expect(violetAnalysis.stops.has('11,1')).toBe(true)
+    expect([...controller.dots].every((key) => violetAnalysis.cells.has(key))).toBe(true)
+    expect([...controller.switches].filter((key) => !violetAnalysis.cells.has(key))).toEqual([])
+    expect([...violetAnalysis.stops].every((key) => violetAnalysis.returnableStops.has(key) && violetAnalysis.exitReachableStops.has(key))).toBe(true)
+
+    controller.dots.clear()
+    controller.switches.clear()
+    controller.visit({ x: 11, y: 1 })
     for (let i = 0; i < 24; i++) controller.update(.033)
     expect(controller.getStatus()).toBe('finished')
     expect(onFinish).toHaveBeenCalledOnce()
