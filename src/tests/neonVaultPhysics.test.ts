@@ -123,14 +123,13 @@ describe('Neon Vault movement', () => {
   })
 
   it('checks active spikes and moving enemies even while the player is stationary', () => {
-    const spikeRun = makeController().controller
-    spikeRun.enemy = { x: 10.6, y: 11, direction: 1 }
-    spikeRun.player = { col: 5, row: 9, x: 5, y: 9, moving: false, shield: false }
-    spikeRun.update(.001)
-    expect(spikeRun.dying).toBe(0)
-    spikeRun.player = { col: 6, row: 9, x: 6, y: 9, moving: false, shield: false }
-    spikeRun.update(.001)
-    expect(spikeRun.dying).toBeGreaterThan(0)
+    for (const x of [5, 6]) {
+      const spikeRun = makeController().controller
+      spikeRun.enemy = { x: 10.6, y: 11, direction: 1 }
+      spikeRun.player = { col: x, row: 9, x, y: 9, moving: false, shield: false }
+      spikeRun.update(.001)
+      expect(spikeRun.dying).toBeGreaterThan(0)
+    }
 
     const enemyRun = makeController().controller
     enemyRun.player = { col: 4, row: 11, x: 4, y: 11, moving: false, shield: false }
