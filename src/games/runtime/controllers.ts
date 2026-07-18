@@ -566,6 +566,7 @@ class LoopHoopsController extends BaseController {
   private rimHits = 0
   private touchedSurface = false
   private wrapGraceSide: -1 | 1 | null = null
+  private wrapApproachSide: -1 | 1 | null = null
   private autoClock = 0
   private trail: Array<Point & { life: number }> = []
   private scoreEffect: LoopScoreEffect = { x: 0, y: 0, life: 0, label: '', points: 0, clean: false, streak: 0 }
@@ -578,7 +579,7 @@ class LoopHoopsController extends BaseController {
   reset() {
     this.ball = { x: this.w * .62, y: this.h * .63, vx: -175, vy: -80, r: 18, rotation: 0, kick: 0, collisionCooldown: 0 }
     this.target = { side: -1, x: this.sideHoopAnchorX(-1), y: this.h * .4, pulse: 0, netPunch: 0 }
-    this.timeLeft = 1; this.cleanStreak = 0; this.rimHits = 0; this.touchedSurface = false; this.wrapGraceSide = null; this.autoClock = 0; this.trail = []; this.scoreEffect = { x: 0, y: 0, life: 0, label: '', points: 0, clean: false, streak: 0 }
+    this.timeLeft = 1; this.cleanStreak = 0; this.rimHits = 0; this.touchedSurface = false; this.wrapGraceSide = null; this.wrapApproachSide = null; this.autoClock = 0; this.trail = []; this.scoreEffect = { x: 0, y: 0, life: 0, label: '', points: 0, clean: false, streak: 0 }
   }
   constructor(theme: GameTheme, options: ControllerOptions) {
     super(theme, options)
@@ -619,17 +620,18 @@ class LoopHoopsController extends BaseController {
     this.ball.x += this.ball.vx * dt
     this.ball.y += this.ball.vy * dt
     const wrapped = this.wrapAcrossSideEdges()
-    if (!wrapped) { this.beginWrapGraceBeforeHardware(); this.clearWrapGraceAfterHardware() }
+    if (!wrapped) { this.beginWrapApproachBeforeHardware(); this.clearWrapApproachAfterHardware(); this.clearWrapGraceAfterHardware() }
     const ceiling = 104 + this.ball.r, floor = this.h - 74 - this.ball.r
     if (this.ball.y < ceiling) { this.ball.y = ceiling; this.ball.vy = Math.abs(this.ball.vy) * .72; this.touchedSurface = true; this.cleanStreak = 0 }
     if (this.ball.y > floor) {
       this.ball.y = floor; this.ball.vy = -Math.max(350, Math.abs(this.ball.vy) * .72); this.ball.kick = .55; this.touchedSurface = true; this.cleanStreak = 0; this.options.onImpact('tap')
     }
 
-    const crossingBoundaryHardware = this.wrapGraceSide === this.target.side
+    const emergingPastBoundaryHardware = this.wrapGraceSide === this.target.side
+    const approachingBoundaryConnector = this.wrapApproachSide === this.target.side
     const hitObstacle = !wrapped && (this.collideWithRimUnderside(previous)
-      || (!crossingBoundaryHardware && this.collideWithHoopConnector())
-      || (!crossingBoundaryHardware && this.collideWithBackboard(previous))
+      || (!emergingPastBoundaryHardware && !approachingBoundaryConnector && this.collideWithHoopConnector())
+      || (!emergingPastBoundaryHardware && this.collideWithBackboard(previous))
       || this.collideWithRim(previous))
     if (!wrapped && !hitObstacle && this.crossedInsideRim(previous)) this.scoreGoal()
     if (hitObstacle) this.limitLoopBallSpeed()
@@ -701,8 +703,8 @@ class LoopHoopsController extends BaseController {
     return true
   }
   private wrapAcrossSideEdges() {
-    if (this.ball.x < 0) { this.ball.x += this.w; this.wrapGraceSide = 1; return true }
-    if (this.ball.x >= this.w) { this.ball.x -= this.w; this.wrapGraceSide = -1; return true }
+    if (this.ball.x < 0) { this.ball.x += this.w; this.wrapGraceSide = 1; this.wrapApproachSide = null; return true }
+    if (this.ball.x >= this.w) { this.ball.x -= this.w; this.wrapGraceSide = -1; this.wrapApproachSide = null; return true }
     return false
   }
   private clearWrapGraceAfterHardware() {
@@ -715,15 +717,25 @@ class LoopHoopsController extends BaseController {
     const cleared = side === -1 ? this.ball.x >= outerRimX + clearance : this.ball.x <= outerRimX - clearance
     if (cleared) this.wrapGraceSide = null
   }
-  private beginWrapGraceBeforeHardware() {
-    if (this.wrapGraceSide !== null || Math.abs(this.ball.vx) > LOOP_WRAP_TRAVEL_SPEED_LIMIT) return
+  private beginWrapApproachBeforeHardware() {
+    if (this.wrapGraceSide !== null || this.wrapApproachSide !== null || Math.abs(this.ball.vx) > LOOP_WRAP_TRAVEL_SPEED_LIMIT) return
     const side = this.target.side
     const movingTowardEdge = side === -1 ? this.ball.vx < 0 : this.ball.vx > 0
     if (!movingTowardEdge) return
     const outerRimX = this.target.x + side * LOOP_RIM_HALF
     const clearance = this.ball.r + this.sideHoopSize() * .024 + .5
     const enteringHardware = side === -1 ? this.ball.x <= outerRimX + clearance : this.ball.x >= outerRimX - clearance
-    if (enteringHardware) this.wrapGraceSide = side
+    if (enteringHardware) this.wrapApproachSide = side
+  }
+  private clearWrapApproachAfterHardware() {
+    if (this.wrapApproachSide === null) return
+    const side = this.wrapApproachSide
+    const movingIntoCourt = side === -1 ? this.ball.vx > 0 : this.ball.vx < 0
+    if (!movingIntoCourt) return
+    const outerRimX = this.sideHoopAnchorX(side) + side * LOOP_RIM_HALF
+    const clearance = this.ball.r + this.sideHoopSize() * .024 + .5
+    const cleared = side === -1 ? this.ball.x >= outerRimX + clearance : this.ball.x <= outerRimX - clearance
+    if (cleared) this.wrapApproachSide = null
   }
   private sideHoopSize() { return Math.min(190, this.w * .49) }
   private sideHoopAnchorX(side: -1 | 1) {

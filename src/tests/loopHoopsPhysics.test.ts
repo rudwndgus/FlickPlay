@@ -11,6 +11,7 @@ type LoopController = GameController & {
   touchedSurface: boolean
   trail: Array<{ x: number; y: number; life: number }>
   wrapGraceSide: -1 | 1 | null
+  wrapApproachSide: -1 | 1 | null
   scoreEffect: { x: number; y: number; life: number; label: string; points: number; clean: boolean; streak: number }
   getHoopConnectorGeometry: () => { start: { x: number; y: number }; end: { x: number; y: number }; radius: number }
   getHoopConnectorGeometries: () => Array<{ start: { x: number; y: number }; end: { x: number; y: number }; radius: number }>
@@ -125,7 +126,8 @@ describe('Loop Hoops physics', () => {
 
     controller.update(frameTime)
 
-    expect(controller.wrapGraceSide).toBe(side)
+    expect(controller.wrapApproachSide).toBe(side)
+    expect(controller.wrapGraceSide).toBeNull()
     expect(controller.ball.vx).toBe(side * 160)
     expect(controller.ball.vy).toBeGreaterThan(0)
     expect(controller.ball.y).toBeGreaterThan(startingY)
@@ -281,6 +283,26 @@ describe('Loop Hoops physics', () => {
     expect(controller.ball.vx).toBeGreaterThan(0)
     expect(controller.ball.x).toBeGreaterThanOrEqual(innerFace + controller.ball.r)
     expect(Math.hypot(controller.ball.vx, controller.ball.vy)).toBeLessThanOrEqual(860)
+  })
+
+  it.each([-1, 1] as const)('keeps the visible backboard solid at normal travel speed on side %s', (side) => {
+    const { controller } = makeController()
+    const size = Math.min(190, 390 * .49)
+    controller.target.side = side
+    controller.target.x = side === -1 ? size * (.29 + .025) : 390 - size * (.29 + .025)
+    const boardCenter = controller.target.x + side * size * .29
+    const innerFace = boardCenter - side * size * .025
+    controller.ball.x = innerFace - side * (controller.ball.r + 4)
+    controller.ball.y = controller.target.y - 55
+    controller.ball.vx = side * 160
+    controller.ball.vy = 0
+    controller.touchedSurface = false
+
+    controller.update(.03)
+
+    expect(controller.ball.vx * side).toBeLessThan(0)
+    expect(side === -1 ? controller.ball.x >= innerFace + controller.ball.r : controller.ball.x <= innerFace - controller.ball.r).toBe(true)
+    expect(controller.touchedSurface).toBe(true)
   })
 
   it('catches high-speed rim impacts without unstable repeated acceleration', () => {
