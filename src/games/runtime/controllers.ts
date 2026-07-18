@@ -1128,6 +1128,16 @@ class NeonEscapeController extends NeonVaultController {}
 
 type StackBlock = { x: number; y: number; width: number; color: string }
 type StackSpark = Point & { vx: number; vy: number; life: number; size: number; color: string }
+export const selectVisibleStackBlocks = <T extends { y: number }>(blocks: T[], camera: number, height: number) => {
+  const visible: T[] = []
+  for (let index = blocks.length - 1; index >= 0; index--) {
+    const screenY = blocks[index].y + camera
+    if (screenY < -56) continue
+    if (screenY > height + 56) break
+    visible.unshift(blocks[index])
+  }
+  return visible
+}
 class PerfectStackController extends BaseController {
   private blocks: StackBlock[] = []
   private current = { x: 0, y: 0, width: 220, dir: 1, speed: 150 }
@@ -1139,11 +1149,15 @@ class PerfectStackController extends BaseController {
   private feedback = 'CENTER THE BLOCK'
   private feedbackLife = 1.8
   private sparks: StackSpark[] = []
+  private backdropLayer: HTMLCanvasElement | null = null
+  private backdropKey = -1
   reset() {
     this.blocks = [{ x: this.w / 2 - 110, y: this.h - 130, width: 220, color: '#fff1a8' }]
-    this.current = { x: 0, y: this.h - 176, width: 220, dir: 1, speed: 145 }; this.fragment = null; this.perfect = 0; this.autoClock = 0; this.perfectPulse = 0; this.placementPulse = 0; this.feedback = 'CENTER THE BLOCK'; this.feedbackLife = 1.8; this.sparks = []
+    this.current = { x: 0, y: this.h - 176, width: 220, dir: 1, speed: 145 }; this.fragment = null; this.perfect = 0; this.autoClock = 0; this.perfectPulse = 0; this.placementPulse = 0; this.feedback = 'CENTER THE BLOCK'; this.feedbackLife = 1.8; this.sparks = []; this.backdropLayer = null; this.backdropKey = -1
   }
   constructor(theme: GameTheme, options: ControllerOptions) { super(theme, options); this.reset() }
+  resize(width: number, height: number) { if (width !== this.w || height !== this.h) { this.backdropLayer = null; this.backdropKey = -1 } super.resize(width, height) }
+  destroy() { this.backdropLayer = null; super.destroy() }
   private burst(x: number, y: number, perfect: boolean) {
     const colors = perfect ? ['#fff7ae', '#ffd86b', '#ff91d0', '#8cf8ff'] : ['#d9dcff', '#91a3ff']
     const count = perfect ? 24 : 9
@@ -1151,6 +1165,7 @@ class PerfectStackController extends BaseController {
       const angle = Math.PI * 2 * i / count, speed = (perfect ? 75 : 38) + i % 5 * 18
       this.sparks.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - (perfect ? 35 : 10), life: .55 + i % 4 * .09, size: perfect ? 2.5 + i % 3 : 2, color: colors[i % colors.length] })
     }
+    if (this.sparks.length > 96) this.sparks.splice(0, this.sparks.length - 96)
   }
   pointerDown() {
     const base = this.blocks[this.blocks.length - 1], left = Math.max(this.current.x, base.x), right = Math.min(this.current.x + this.current.width, base.x + base.width), overlap = right - left
@@ -1172,28 +1187,37 @@ class PerfectStackController extends BaseController {
     this.sparks.forEach((spark) => { spark.x += spark.vx * dt; spark.y += spark.vy * dt; spark.vy += 125 * dt; spark.life -= dt }); this.sparks = this.sparks.filter((spark) => spark.life > 0)
     if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .2) { this.autoClock = 0; this.autopilot() } }
   }
+  private getBackdrop() {
+    const key = Math.min(11, Math.floor(this.score / 5))
+    if (this.backdropLayer?.width === Math.ceil(this.w) && this.backdropLayer.height === Math.ceil(this.h) && this.backdropKey === key) return this.backdropLayer
+    const layer = document.createElement('canvas'); layer.width = Math.ceil(this.w); layer.height = Math.ceil(this.h); const context = layer.getContext('2d', { alpha: false })!
+    const hue = 244 + key * 5, gradient = context.createLinearGradient(0, 0, 0, this.h); gradient.addColorStop(0, '#11152f'); gradient.addColorStop(.48, `hsl(${hue},55%,35%)`); gradient.addColorStop(1, '#39204f'); context.fillStyle = gradient; context.fillRect(0, 0, this.w, this.h)
+    const moonGlow = context.createRadialGradient(this.w * .78, this.h * .2, 2, this.w * .78, this.h * .2, 82); moonGlow.addColorStop(0, 'rgba(255,245,190,.42)'); moonGlow.addColorStop(.2, 'rgba(255,220,165,.2)'); moonGlow.addColorStop(1, 'rgba(255,180,220,0)'); context.fillStyle = moonGlow; context.fillRect(0, 0, this.w, this.h * .42)
+    context.fillStyle = '#fff2c5'; context.shadowColor = '#ffdca8'; context.shadowBlur = 24; context.beginPath(); context.arc(this.w * .78, this.h * .2, 18, 0, Math.PI * 2); context.fill(); context.shadowBlur = 0
+    for (let i = 0; i < 34; i++) { const x = (i * 83 + 29) % this.w, y = 105 + (i * 47) % Math.max(120, this.h * .47); context.globalAlpha = .35 + i % 4 * .09; context.fillStyle = i % 5 ? '#fff' : '#9cf7ff'; context.fillRect(x, y, i % 7 ? 1.5 : 2.5, i % 7 ? 1.5 : 2.5) } context.globalAlpha = 1
+    context.fillStyle = 'rgba(16,12,42,.42)'; for (let i = 0; i < 13; i++) { const buildingWidth = 25 + i % 3 * 9, buildingHeight = 48 + (i * 31) % 100, x = i * (this.w / 12) - 8; context.fillRect(x, this.h - 112 - buildingHeight, buildingWidth, buildingHeight); context.fillStyle = 'rgba(255,221,126,.16)'; for (let windowY = this.h - 102 - buildingHeight; windowY < this.h - 125; windowY += 18) context.fillRect(x + 7 + i % 2 * 4, windowY, 3, 5); context.fillStyle = 'rgba(16,12,42,.42)' }
+    this.backdropLayer = layer; this.backdropKey = key; return layer
+  }
   render(ctx: CanvasRenderingContext2D) {
-    const hue = 244 + Math.min(55, this.score * 3.5), gradient = ctx.createLinearGradient(0, 0, 0, this.h); gradient.addColorStop(0, '#11152f'); gradient.addColorStop(.48, `hsl(${hue},55%,35%)`); gradient.addColorStop(1, '#39204f'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, this.w, this.h)
-    const moonGlow = ctx.createRadialGradient(this.w * .78, this.h * .2, 2, this.w * .78, this.h * .2, 82); moonGlow.addColorStop(0, 'rgba(255,245,190,.42)'); moonGlow.addColorStop(.2, 'rgba(255,220,165,.2)'); moonGlow.addColorStop(1, 'rgba(255,180,220,0)'); ctx.fillStyle = moonGlow; ctx.fillRect(0, 0, this.w, this.h * .42)
-    ctx.fillStyle = '#fff2c5'; ctx.shadowColor = '#ffdca8'; ctx.shadowBlur = 24; ctx.beginPath(); ctx.arc(this.w * .78, this.h * .2, 18, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0
-    for (let i = 0; i < 34; i++) { const x = (i * 83 + 29) % this.w, y = 105 + (i * 47) % Math.max(120, this.h * .47), alpha = .25 + (Math.sin(this.elapsed * 2.2 + i * 1.7) + 1) * .25; ctx.globalAlpha = alpha; ctx.fillStyle = i % 5 ? '#fff' : '#9cf7ff'; ctx.fillRect(x, y, i % 7 ? 1.5 : 2.5, i % 7 ? 1.5 : 2.5) } ctx.globalAlpha = 1
+    ctx.drawImage(this.getBackdrop(), 0, 0, this.w, this.h)
+    for (let i = 0; i < 8; i++) { const x = (i * 139 + 41) % this.w, y = 130 + (i * 71) % Math.max(120, this.h * .42), alpha = .2 + (Math.sin(this.elapsed * 2.2 + i * 1.7) + 1) * .24; ctx.globalAlpha = alpha; ctx.fillStyle = i % 3 ? '#fff' : '#9cf7ff'; ctx.fillRect(x, y, 2, 2) } ctx.globalAlpha = 1
     ctx.fillStyle = 'rgba(255,255,255,.08)'; for (let i = 0; i < 5; i++) { const x = ((i * 113 + 25) + this.elapsed * (2 + i % 2)) % (this.w + 150) - 75; ctx.beginPath(); ctx.ellipse(x, 220 + (i % 3) * 105, 52 + i * 4, 12 + i % 2 * 5, 0, 0, Math.PI * 2); ctx.fill() }
-    ctx.fillStyle = 'rgba(16,12,42,.42)'; for (let i = 0; i < 13; i++) { const buildingWidth = 25 + i % 3 * 9, buildingHeight = 48 + (i * 31) % 100, x = i * (this.w / 12) - 8; ctx.fillRect(x, this.h - 112 - buildingHeight, buildingWidth, buildingHeight); ctx.fillStyle = 'rgba(255,221,126,.16)'; for (let windowY = this.h - 102 - buildingHeight; windowY < this.h - 125; windowY += 18) ctx.fillRect(x + 7 + i % 2 * 4, windowY, 3, 5); ctx.fillStyle = 'rgba(16,12,42,.42)' }
     const camera = Math.max(0, this.blocks.length * 46 - (this.h - 260))
     const base = this.blocks[this.blocks.length - 1], baseY = base.y + camera, currentY = this.current.y + camera
     ctx.save(); ctx.setLineDash([4, 7]); ctx.strokeStyle = `rgba(255,240,168,${.16 + Math.sin(this.elapsed * 4) * .05})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(base.x, currentY + 19); ctx.lineTo(base.x, baseY + 20); ctx.moveTo(base.x + base.width, currentY + 19); ctx.lineTo(base.x + base.width, baseY + 20); ctx.stroke(); ctx.setLineDash([]); ctx.restore()
     const drawBlock = (b: StackBlock, active = false, offsetY = camera) => {
       const y = b.y + offsetY, depth = Math.min(9, Math.max(3, b.width * .08)), radius = Math.min(8, Math.max(2, b.width / 2)); ctx.save()
-      ctx.shadowColor = active ? 'rgba(255,213,102,.7)' : 'rgba(10,8,35,.42)'; ctx.shadowBlur = active ? 24 + Math.sin(this.elapsed * 7) * 5 : 14; ctx.shadowOffsetY = 7
+      if (active) { ctx.shadowColor = 'rgba(255,213,102,.7)'; ctx.shadowBlur = 20 + Math.sin(this.elapsed * 7) * 4; ctx.shadowOffsetY = 6 }
       ctx.fillStyle = 'rgba(14,10,43,.45)'; ctx.beginPath(); ctx.moveTo(b.x + 2, y + 40); ctx.lineTo(b.x + b.width, y + 40); ctx.lineTo(b.x + b.width - depth, y + 40 + depth); ctx.lineTo(b.x + depth, y + 40 + depth); ctx.closePath(); ctx.fill()
-      const face = ctx.createLinearGradient(b.x, y, b.x + b.width, y + 40); face.addColorStop(0, active ? '#ffbd59' : b.color); face.addColorStop(.5, active ? '#ffe58a' : b.color); face.addColorStop(1, active ? '#ff9f72' : b.color); ctx.fillStyle = face; roundedRect(ctx, b.x, y, b.width, 40, radius); ctx.fill(); ctx.shadowBlur = 0; ctx.shadowOffsetY = 0
+      if (active) { const face = ctx.createLinearGradient(b.x, y, b.x + b.width, y + 40); face.addColorStop(0, '#ffbd59'); face.addColorStop(.5, '#ffe58a'); face.addColorStop(1, '#ff9f72'); ctx.fillStyle = face } else ctx.fillStyle = b.color
+      roundedRect(ctx, b.x, y, b.width, 40, radius); ctx.fill(); ctx.shadowBlur = 0; ctx.shadowOffsetY = 0
       ctx.fillStyle = active ? 'rgba(255,255,225,.7)' : 'rgba(255,255,255,.32)'; roundedRect(ctx, b.x + Math.min(5, b.width * .1), y + 4, Math.max(1, b.width - Math.min(10, b.width * .2)), 5, 2); ctx.fill()
       ctx.strokeStyle = active ? 'rgba(255,250,204,.7)' : 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; roundedRect(ctx, b.x + .5, y + .5, Math.max(1, b.width - 1), 39, radius); ctx.stroke(); ctx.restore()
     }
     if (this.blocks.length === 1) { ctx.fillStyle = 'rgba(8,7,25,.3)'; ctx.beginPath(); ctx.ellipse(this.w / 2, this.h - 82, 132, 20, 0, 0, Math.PI * 2); ctx.fill() }
-    this.blocks.forEach((block) => drawBlock(block, false)); drawBlock({ x: this.current.x, y: this.current.y, width: this.current.width, color: '#ffda72' }, true)
+    selectVisibleStackBlocks(this.blocks, camera, this.h).forEach((block) => drawBlock(block, false)); drawBlock({ x: this.current.x, y: this.current.y, width: this.current.width, color: '#ffda72' }, true)
     if (this.fragment) { ctx.save(); ctx.translate(this.fragment.x + this.fragment.width / 2, this.fragment.y + camera + 20); ctx.rotate(this.fragment.rotation); drawBlock({ ...this.fragment, x: -this.fragment.width / 2, y: -20 }, false, 0); ctx.restore() }
-    for (const spark of this.sparks) { ctx.globalAlpha = clamp(spark.life * 2, 0, 1); ctx.fillStyle = spark.color; ctx.shadowColor = spark.color; ctx.shadowBlur = 8; ctx.beginPath(); ctx.arc(spark.x, spark.y + camera, spark.size, 0, Math.PI * 2); ctx.fill() } ctx.globalAlpha = 1; ctx.shadowBlur = 0
+    for (const spark of this.sparks) { ctx.globalAlpha = clamp(spark.life * 2, 0, 1); ctx.fillStyle = spark.color; ctx.fillRect(spark.x - spark.size / 2, spark.y + camera - spark.size / 2, spark.size, spark.size) } ctx.globalAlpha = 1
     if (this.placementPulse > 0) { const placed = this.blocks[this.blocks.length - 1], y = placed.y + camera + 20; ctx.globalAlpha = this.placementPulse * .55; ctx.strokeStyle = '#fff4b1'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(placed.x + placed.width / 2, y, placed.width * (.5 + (1 - this.placementPulse) * .2), 19 + (1 - this.placementPulse) * 14, 0, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1 }
     if (this.perfectPulse > 0) { const glow = ctx.createRadialGradient(this.w / 2, this.h * .45, 0, this.w / 2, this.h * .45, this.w * .7); glow.addColorStop(0, `rgba(255,235,144,${this.perfectPulse * .18})`); glow.addColorStop(1, 'rgba(255,133,216,0)'); ctx.fillStyle = glow; ctx.fillRect(0, 0, this.w, this.h) }
     ctx.fillStyle = 'rgba(12,10,38,.62)'; ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; roundedRect(ctx, 18, 58, this.w - 36, 68, 18); ctx.fill(); ctx.stroke()

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { gameRegistry } from '../games/registry'
+import { selectVisibleStackBlocks } from '../games/runtime/controllers'
 import type { GameController } from '../games/types'
 
 type StackBlock = { x: number; y: number; width: number; color: string }
@@ -62,5 +63,27 @@ describe('Perfect Stack placement', () => {
 
     expect(controller.getStatus()).toBe('finished')
     expect(onFinish).toHaveBeenCalledWith(0)
+  })
+
+  it('keeps particle memory bounded during an unrealistically fast perfect streak', () => {
+    const { controller } = makeController()
+    for (let floor = 0; floor < 160; floor++) {
+      controller.current.x = controller.blocks.at(-1)!.x
+      controller.pointerDown(0, 0)
+    }
+
+    expect(controller.blocks).toHaveLength(161)
+    expect(controller.getScore()).toBe(160)
+    expect(controller.sparks.length).toBeLessThanOrEqual(96)
+  })
+
+  it('selects only the small visible slice of a very tall tower', () => {
+    const blocks = Array.from({ length: 1000 }, (_, index) => ({ y: 800 - index * 46, index }))
+    const camera = blocks.length * 46 - (844 - 260)
+    const visible = selectVisibleStackBlocks(blocks, camera, 844)
+
+    expect(visible.length).toBeLessThan(24)
+    expect(visible.length).toBeGreaterThan(8)
+    expect(visible.every((block) => block.y + camera >= -56 && block.y + camera <= 900)).toBe(true)
   })
 })
