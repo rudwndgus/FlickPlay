@@ -34,7 +34,7 @@ const VAULT_STAGES: VaultStage[] = [
   {
     map: NEON_VAULT_MAP, start: { x: 1, y: 17 }, exit: { x: 11, y: 1 }, coins: ['1,9', '11,9', '7,7'],
     portals: new Map([['11,17', { x: 1, y: 1 }], ['1,1', { x: 11, y: 17 }]]),
-    spikes: [{ x: 6, y: 9, phase: 0 }, { x: 9, y: 13, phase: .72 }], switches: ['5,3', '11,15'], shield: '3,9',
+    spikes: [{ x: 5, y: 9, phase: 0 }, { x: 6, y: 9, phase: 0 }, { x: 9, y: 13, phase: .72 }], switches: ['5,3', '11,15'], shield: '3,9',
     enemy: { row: 11, start: 4, min: 3.4, max: 10.6, speed: 1.35 }, laser: { row: 11, from: 5, to: 10 },
     palette: { background: '#020204', floor: '#030308', wallOuter: '#31051f', wallInner: '#650932', wallEdge: '#ff347f', wallGlow: '#ff075e', signal: '#f4ff2d', player: '#fbff65', playerCore: '#9fae00', hud: 'rgba(0,0,0,.9)', hudAccent: '#ff2b79' },
   },
