@@ -7,6 +7,7 @@ const MAX_CLEAN_COMBO = 5
 const MAX_PHYSICS_STEP = 1 / 120
 const LOOP_RIM_HALF = 36
 const LOOP_RIM_TUBE_RADIUS = 4
+const LOOP_WRAP_TRAVEL_SPEED_LIMIT = 280
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
@@ -618,7 +619,7 @@ class LoopHoopsController extends BaseController {
     this.ball.x += this.ball.vx * dt
     this.ball.y += this.ball.vy * dt
     const wrapped = this.wrapAcrossSideEdges()
-    if (!wrapped) this.clearWrapGraceAfterHardware()
+    if (!wrapped) { this.beginWrapGraceBeforeHardware(); this.clearWrapGraceAfterHardware() }
     const ceiling = 104 + this.ball.r, floor = this.h - 74 - this.ball.r
     if (this.ball.y < ceiling) { this.ball.y = ceiling; this.ball.vy = Math.abs(this.ball.vy) * .72; this.touchedSurface = true; this.cleanStreak = 0 }
     if (this.ball.y > floor) {
@@ -707,10 +708,22 @@ class LoopHoopsController extends BaseController {
   private clearWrapGraceAfterHardware() {
     if (this.wrapGraceSide === null) return
     const side = this.wrapGraceSide
+    const movingIntoCourt = side === -1 ? this.ball.vx > 0 : this.ball.vx < 0
+    if (!movingIntoCourt) return
     const outerRimX = this.sideHoopAnchorX(side) + side * LOOP_RIM_HALF
     const clearance = this.ball.r + this.sideHoopSize() * .024 + .5
     const cleared = side === -1 ? this.ball.x >= outerRimX + clearance : this.ball.x <= outerRimX - clearance
     if (cleared) this.wrapGraceSide = null
+  }
+  private beginWrapGraceBeforeHardware() {
+    if (this.wrapGraceSide !== null || Math.abs(this.ball.vx) > LOOP_WRAP_TRAVEL_SPEED_LIMIT) return
+    const side = this.target.side
+    const movingTowardEdge = side === -1 ? this.ball.vx < 0 : this.ball.vx > 0
+    if (!movingTowardEdge) return
+    const outerRimX = this.target.x + side * LOOP_RIM_HALF
+    const clearance = this.ball.r + this.sideHoopSize() * .024 + .5
+    const enteringHardware = side === -1 ? this.ball.x <= outerRimX + clearance : this.ball.x >= outerRimX - clearance
+    if (enteringHardware) this.wrapGraceSide = side
   }
   private sideHoopSize() { return Math.min(190, this.w * .49) }
   private sideHoopAnchorX(side: -1 | 1) {
