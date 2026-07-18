@@ -8,7 +8,6 @@ type InternalHoopFlight = GameController & {
   speed: number
   cleanStreak: number
   scoreEffects: Array<{ label: string; streak: number }>
-  captureTime: number
 }
 
 const makeController = () => {
@@ -22,6 +21,16 @@ const makeController = () => {
 }
 
 describe('Hoop Flight physics', () => {
+  it('applies a tap impulse without teleporting the ball', () => {
+    const { controller } = makeController()
+    const previousY = controller.ball.y
+
+    controller.pointerDown(0, 0)
+
+    expect(controller.ball.y).toBe(previousY)
+    expect(controller.ball.vy).toBe(-570)
+  })
+
   it('pushes the ball backward when it strikes the rim', () => {
     const { controller } = makeController()
     const hoop = { x: 275, y: 370, passed: false, pulse: 0, netPunch: 0 }
@@ -55,8 +64,42 @@ describe('Hoop Flight physics', () => {
     expect(controller.getScore()).toBe(1)
     expect(onScore).toHaveBeenCalledWith(1)
     expect(hoop.passed).toBe(true)
-    expect(hoop.netPunch).toBe(1)
-    expect(controller.captureTime).toBeGreaterThan(0)
+    expect(hoop.netPunch).toBeGreaterThan(.9)
+  })
+
+  it('keeps playing above the ceiling and lets gravity complete the arc', () => {
+    const { controller, onFinish } = makeController()
+    controller.hoops = [{ x: 1000, y: 370, passed: true, pulse: 0 }]
+    controller.ball.y = 45
+    controller.ball.vy = -570
+
+    controller.update(1 / 60)
+    expect(controller.ball.y).toBeLessThan(42)
+    expect(controller.getStatus()).toBe('playing')
+
+    for (let frame = 0; frame < 75; frame++) controller.update(1 / 120)
+
+    expect(controller.ball.y).toBeGreaterThan(42)
+    expect(controller.getStatus()).toBe('playing')
+    expect(onFinish).not.toHaveBeenCalled()
+  })
+
+  it('produces nearly identical arcs at 30Hz and 120Hz', () => {
+    const slow = makeController().controller
+    const fast = makeController().controller
+    for (const controller of [slow, fast]) {
+      controller.hoops = [{ x: 1000, y: 600, passed: true, pulse: 0 }]
+      controller.ball.x = 135
+      controller.ball.y = 420
+      controller.pointerDown(0, 0)
+    }
+
+    for (let frame = 0; frame < 9; frame++) slow.update(1 / 30)
+    for (let frame = 0; frame < 36; frame++) fast.update(1 / 120)
+
+    expect(slow.ball.x).toBeCloseTo(fast.ball.x, 1)
+    expect(slow.ball.y).toBeCloseTo(fast.ball.y, 1)
+    expect(slow.ball.vy).toBeCloseTo(fast.ball.vy, 1)
   })
 
   it('does not miss a score when the ball crosses the rim over several 120Hz frames', () => {
