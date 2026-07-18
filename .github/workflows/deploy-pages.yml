@@ -1,4 +1,4 @@
-name: Deploy FlickPlay to GitHub Pages
+name: Deploy Flicko to GitHub Pages
 
 on:
   push:

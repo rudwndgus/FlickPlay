@@ -19,11 +19,40 @@ export const defaultState: PersistedState = {
 }
 
 export async function loadState(): Promise<PersistedState> {
-  try { return { ...defaultState, ...await get<PersistedState>(APP_CONFIG.storageKey) } }
-  catch {
-    try { return { ...defaultState, ...JSON.parse(localStorage.getItem(APP_CONFIG.storageKey) ?? '{}') } }
-    catch { return defaultState }
+  const storageKeys = [APP_CONFIG.storageKey, ...APP_CONFIG.legacyStorageKeys]
+
+  for (const key of storageKeys) {
+    try {
+      const state = await get<PersistedState>(key)
+      if (state) {
+        if (key !== APP_CONFIG.storageKey) {
+          try { await set(APP_CONFIG.storageKey, state) }
+          catch { /* The loaded legacy state remains usable for this session. */ }
+        }
+        return { ...defaultState, ...state }
+      }
+    } catch {
+      break
+    }
   }
+
+  for (const key of storageKeys) {
+    try {
+      const serializedState = localStorage.getItem(key)
+      if (serializedState) {
+        const state = JSON.parse(serializedState) as PersistedState
+        if (key !== APP_CONFIG.storageKey) {
+          try { localStorage.setItem(APP_CONFIG.storageKey, serializedState) }
+          catch { /* The loaded legacy state remains usable for this session. */ }
+        }
+        return { ...defaultState, ...state }
+      }
+    } catch {
+      return defaultState
+    }
+  }
+
+  return defaultState
 }
 
 export async function saveState(state: PersistedState) {
