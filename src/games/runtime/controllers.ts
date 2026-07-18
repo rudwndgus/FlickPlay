@@ -680,24 +680,19 @@ class LoopHoopsController extends BaseController {
     const size = this.sideHoopSize()
     const centerX = this.target.x + this.target.side * size * .29
     const halfWidth = size * .025, top = this.target.y - size * .48, bottom = this.target.y + size * .25
-    const closestX = clamp(this.ball.x, centerX - halfWidth, centerX + halfWidth)
-    const closestY = clamp(this.ball.y, top, bottom)
-    const dx = this.ball.x - closestX, dy = this.ball.y - closestY
-    const distanceToBoard = Math.hypot(dx, dy)
     const innerFace = centerX - this.target.side * halfWidth
     const crossedInnerFace = this.target.side < 0
       ? previous.x - this.ball.r >= innerFace && this.ball.x - this.ball.r < innerFace
       : previous.x + this.ball.r <= innerFace && this.ball.x + this.ball.r > innerFace
-    const withinFace = this.ball.y >= top - this.ball.r && this.ball.y <= bottom + this.ball.r
-    if (!crossedInnerFace && (distanceToBoard <= 0 || distanceToBoard >= this.ball.r)) return false
+    const overlapsVisibleBoard = this.ball.y + this.ball.r >= top && this.ball.y - this.ball.r <= bottom
+    if (!crossedInnerFace || !overlapsVisibleBoard) return false
 
-    let nx = dx / Math.max(.001, distanceToBoard), ny = dy / Math.max(.001, distanceToBoard)
-    if (crossedInnerFace && withinFace) { nx = -this.target.side; ny = 0; this.ball.x = innerFace + nx * (this.ball.r + .5) }
-    else { const overlap = this.ball.r - distanceToBoard + .5; this.ball.x += nx * overlap; this.ball.y += ny * overlap }
-    const impact = this.ball.vx * nx + this.ball.vy * ny
+    const nx = -this.target.side
+    this.ball.x = innerFace + nx * (this.ball.r + .5)
+    const impact = this.ball.vx * nx
     if (impact < 0) {
-      this.ball.vx -= 1.68 * impact * nx; this.ball.vy -= 1.68 * impact * ny
-      this.ball.vx *= .96; this.ball.vy *= .96
+      this.ball.vx -= 1.68 * impact * nx
+      this.ball.vx *= .96
     }
     this.stabilizeBallAfterImpact(false)
     return true
