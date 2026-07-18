@@ -8,6 +8,26 @@ const MAX_PHYSICS_STEP = 1 / 120
 const LOOP_RIM_HALF = 36
 const LOOP_RIM_TUBE_RADIUS = 4
 const LOOP_WRAP_TRAVEL_SPEED_LIMIT = 280
+export const PIN_CORE_FLIGHT_SECONDS = .085
+const PIN_CORE_MAX_RADIUS = 92
+const PIN_CORE_RADIUS_RATIO = .24
+const PIN_SHAFT_INSET = 4
+const PIN_SHAFT_LENGTH = 72
+const PIN_ATTACHED_SHAFT_WIDTH = 4
+const PIN_FLYING_SHAFT_WIDTH = 5
+const PIN_ATTACHED_HEAD_RADIUS = 8
+const PIN_FLYING_HEAD_RADIUS = 9
+const PIN_HITBOX_INSET = 1
+
+export const getPinCoreVisibleHitAngle = (width: number) => {
+  const coreRadius = Math.min(width * PIN_CORE_RADIUS_RATIO, PIN_CORE_MAX_RADIUS)
+  const headCenterRadius = coreRadius + PIN_SHAFT_LENGTH + PIN_SHAFT_INSET
+  const visibleHeadOverlap = PIN_ATTACHED_HEAD_RADIUS + PIN_FLYING_HEAD_RADIUS - PIN_HITBOX_INSET
+  const visibleShaftOverlap = (PIN_ATTACHED_SHAFT_WIDTH + PIN_FLYING_SHAFT_WIDTH) / 2 - PIN_HITBOX_INSET
+  const headAngle = 2 * Math.asin(visibleHeadOverlap / (2 * headCenterRadius))
+  const shaftAngle = 2 * Math.asin(visibleShaftOverlap / (2 * (coreRadius - PIN_SHAFT_INSET)))
+  return Math.max(headAngle, shaftAngle)
+}
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
@@ -1244,25 +1264,26 @@ class PinCoreController extends BaseController {
   private completeShot() {
     const incoming = Math.PI / 2 - this.rotation
     const minGap = this.pins.length ? Math.min(...this.pins.map((p) => Math.abs(Math.atan2(Math.sin(p - incoming), Math.cos(p - incoming))))) : Math.PI
+    const hitAngle = getPinCoreVisibleHitAngle(this.w)
     this.shot = 0
-    if (minGap < .24) { this.finish(); return }
-    this.pins.push(incoming); this.stickPulse = 1; this.addScore(1); if (minGap < .42) this.options.onImpact('perfect'); this.speed = (1.1 + this.score * .055) * (Math.floor(this.score / 7) % 2 ? -1 : 1)
+    if (minGap < hitAngle) { this.finish(); return }
+    this.pins.push(incoming); this.stickPulse = 1; this.addScore(1); if (minGap < hitAngle + .12) this.options.onImpact('perfect'); this.speed = (1.1 + this.score * .055) * (Math.floor(this.score / 7) % 2 ? -1 : 1)
   }
-  autopilot() { if (this.shot > 0) return; const predictedRotation = this.rotation + this.speed * .2, incoming = Math.PI / 2 - predictedRotation; const gap = Math.min(...this.pins.map((p) => Math.abs(Math.atan2(Math.sin(p - incoming), Math.cos(p - incoming))))); if (gap > .5) this.pointerDown() }
+  autopilot() { if (this.shot > 0) return; const predictedRotation = this.rotation + this.speed * PIN_CORE_FLIGHT_SECONDS, incoming = Math.PI / 2 - predictedRotation; const gap = Math.min(...this.pins.map((p) => Math.abs(Math.atan2(Math.sin(p - incoming), Math.cos(p - incoming))))); if (gap > .5) this.pointerDown() }
   tick(dt: number) {
     this.rotation += this.speed * dt; this.stickPulse = Math.max(0, this.stickPulse - dt * 5)
-    if (this.shot > 0) { this.shot = Math.min(1, this.shot + dt * 5); if (this.shot >= 1) this.completeShot() }
+    if (this.shot > 0) { this.shot = Math.min(1, this.shot + dt / PIN_CORE_FLIGHT_SECONDS); if (this.shot >= 1) this.completeShot() }
     if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .22) { this.autoClock = 0; this.autopilot() } }
   }
   render(ctx: CanvasRenderingContext2D) {
     this.paintBackdrop(ctx, '#24262b', '#08090b')
-    const cx = this.w / 2, cy = this.h * .41, radius = Math.min(this.w * .24, 92)
+    const cx = this.w / 2, cy = this.h * .41, radius = Math.min(this.w * PIN_CORE_RADIUS_RATIO, PIN_CORE_MAX_RADIUS)
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(this.rotation)
-    for (const angle of this.pins) { ctx.save(); ctx.rotate(angle); ctx.strokeStyle = '#f5f2dc'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(radius - 4, 0); ctx.lineTo(radius + 72, 0); ctx.stroke(); ctx.fillStyle = this.theme.accent; ctx.beginPath(); ctx.arc(radius + 76, 0, 8, 0, Math.PI * 2); ctx.fill(); ctx.restore() }
+    for (const angle of this.pins) { ctx.save(); ctx.rotate(angle); ctx.strokeStyle = '#f5f2dc'; ctx.lineWidth = PIN_ATTACHED_SHAFT_WIDTH; ctx.beginPath(); ctx.moveTo(radius - PIN_SHAFT_INSET, 0); ctx.lineTo(radius + PIN_SHAFT_LENGTH, 0); ctx.stroke(); ctx.fillStyle = this.theme.accent; ctx.beginPath(); ctx.arc(radius + PIN_SHAFT_LENGTH + PIN_SHAFT_INSET, 0, PIN_ATTACHED_HEAD_RADIUS, 0, Math.PI * 2); ctx.fill(); ctx.restore() }
     ctx.fillStyle = '#f7e744'; ctx.shadowColor = '#f7e744'; ctx.shadowBlur = 25; ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#15161a'; ctx.font = '900 34px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(Math.max(0, 12 - this.score % 12)), 0, 0); ctx.restore(); ctx.shadowBlur = 0
-    const easedShot = this.shot > 0 ? 1 - Math.pow(1 - this.shot, 3) : 0, startHandleY = this.h - 102, contactHandleY = cy + radius + 76, handleY = startHandleY + (contactHandleY - startHandleY) * easedShot
+    const easedShot = this.shot > 0 ? 1 - Math.pow(1 - this.shot, 3) : 0, startHandleY = this.h - 102, contactHandleY = cy + radius + PIN_SHAFT_LENGTH + PIN_SHAFT_INSET, handleY = startHandleY + (contactHandleY - startHandleY) * easedShot
     if (this.shot > 0) { ctx.strokeStyle = 'rgba(255,255,255,.13)'; ctx.lineWidth = 3; for (let trail = 1; trail <= 3; trail++) { ctx.globalAlpha = (1 - easedShot) * (.34 - trail * .07); ctx.beginPath(); ctx.moveTo(cx, handleY + trail * 13); ctx.lineTo(cx, handleY + trail * 13 + 22); ctx.stroke() } ctx.globalAlpha = 1 }
-    ctx.strokeStyle = '#fff'; ctx.shadowColor = this.shot > 0 ? 'rgba(255,255,255,.5)' : 'transparent'; ctx.shadowBlur = this.shot > 0 ? 12 : 0; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx, handleY - 80); ctx.lineTo(cx, handleY - 8); ctx.stroke(); ctx.fillStyle = this.theme.accent; ctx.shadowColor = this.theme.accent; ctx.shadowBlur = this.shot > 0 ? 18 : 7; ctx.beginPath(); ctx.arc(cx, handleY, 9, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0
+    ctx.strokeStyle = '#fff'; ctx.shadowColor = this.shot > 0 ? 'rgba(255,255,255,.5)' : 'transparent'; ctx.shadowBlur = this.shot > 0 ? 12 : 0; ctx.lineWidth = PIN_FLYING_SHAFT_WIDTH; ctx.beginPath(); ctx.moveTo(cx, handleY - PIN_SHAFT_LENGTH - PIN_SHAFT_INSET * 2); ctx.lineTo(cx, handleY - PIN_ATTACHED_HEAD_RADIUS); ctx.stroke(); ctx.fillStyle = this.theme.accent; ctx.shadowColor = this.theme.accent; ctx.shadowBlur = this.shot > 0 ? 18 : 7; ctx.beginPath(); ctx.arc(cx, handleY, PIN_FLYING_HEAD_RADIUS, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0
     if (this.stickPulse > 0) { ctx.globalAlpha = this.stickPulse; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, contactHandleY, 10 + (1 - this.stickPulse) * 18, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1 }
     drawGameLabel(ctx, 'TAP THE GAP', `${this.score} pins`, this.w, this.h, 32)
   }
