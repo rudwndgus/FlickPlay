@@ -7,6 +7,7 @@
   -webkit-font-smoothing: antialiased;
   --safe-top: max(18px, env(safe-area-inset-top));
   --safe-bottom: max(18px, env(safe-area-inset-bottom));
+  --game-header-space: calc(var(--safe-top) + 58px);
 }
 
 * { box-sizing: border-box; }
@@ -69,7 +70,7 @@ button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 .primary-button { width: 100%; min-height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 9px; font-weight: 800; }
 
 .game-player { position: fixed; z-index: 20; inset: 0; overflow: hidden; animation: game-enter .32s cubic-bezier(.2,.78,.2,1) both; }
-.game-header { position: absolute; z-index: 4; top: 0; left: 0; right: 0; padding: var(--safe-top) 14px 12px; display: flex; align-items: center; gap: 10px; background: linear-gradient(180deg, rgba(5,6,10,.68), transparent); }
+.game-header { position: absolute; z-index: 4; top: 0; left: 0; right: 0; height: var(--game-header-space); padding: var(--safe-top) 14px 8px; display: flex; align-items: center; gap: 10px; background: rgba(7,8,16,.94); border-bottom: 1px solid rgba(255,255,255,.1); box-shadow: 0 8px 26px rgba(0,0,0,.18); backdrop-filter: blur(16px); }
 .header-game { min-width: 0; display: flex; align-items: center; gap: 9px; }
 .header-game > span { width: 35px; height: 35px; display: grid; flex: 0 0 35px; place-items: center; border-radius: 11px; font-family: ui-monospace, monospace; font-size: 9px; font-weight: 800; }
 .header-game div, .header-score { display: flex; flex-direction: column; }
@@ -77,7 +78,7 @@ button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 .header-game strong { max-width: 115px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'Arial Narrow', Inter, sans-serif; font-size: 13px; font-weight: 900; }
 .header-score { margin-left: auto; text-align: right; }
 .header-score strong { font-family: ui-monospace, monospace; font-size: 19px; }
-.game-player .game-canvas { z-index: 0; }
+.game-player .game-canvas { z-index: 0; inset: var(--game-header-space) 0 auto; height: calc(100% - var(--game-header-space)); }
 .pause-layer, .result-layer { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; background: rgba(5,6,10,.62); backdrop-filter: blur(9px); }
 .pause-layer button { display: flex; align-items: center; gap: 10px; padding: 16px 22px; border-radius: 18px; background: #fff; color: #111; font-weight: 800; }
 .result-card { width: min(88vw, 390px); padding: 30px 24px 22px; border: 1px solid rgba(255,255,255,.15); border-radius: 26px; text-align: center; background: rgba(17,18,24,.88); box-shadow: 0 28px 80px rgba(0,0,0,.4); }

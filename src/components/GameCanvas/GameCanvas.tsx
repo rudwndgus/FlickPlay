@@ -28,10 +28,11 @@ export function GameCanvas({ game, preview = false, active = true, paused = fals
       onImpact: (kind) => audioManager.play(kind),
     })
     controllerRef.current = controller
-    let frame = 0, last = performance.now(), cssWidth = 0, cssHeight = 0
+    let frame = 0, last = performance.now(), cssWidth = 0, cssHeight = 0, initialized = false
     const resize = () => {
       const rect = canvas.getBoundingClientRect(), dprLimit = game.id === 'perfect-stack' ? 1.5 : 2, dpr = Math.min(dprLimit, window.devicePixelRatio || 1)
       cssWidth = rect.width; cssHeight = rect.height; canvas.width = Math.round(cssWidth * dpr); canvas.height = Math.round(cssHeight * dpr); controller.resize(cssWidth, cssHeight, dpr)
+      if (!initialized && cssWidth > 0 && cssHeight > 0) { initialized = true; controller.restart() }
     }
     const observer = new ResizeObserver(resize); observer.observe(canvas); resize()
     const loop = (time: number) => {
