@@ -295,14 +295,38 @@ describe('Loop Hoops physics', () => {
     controller.ball.x = innerFace - side * (controller.ball.r + 4)
     controller.ball.y = controller.target.y - 55
     controller.ball.vx = side * 160
-    controller.ball.vy = 0
+    controller.ball.vy = 120
     controller.touchedSurface = false
+    const expectedVerticalVelocity = controller.ball.vy + 1850 * .03
 
     controller.update(.03)
 
     expect(controller.ball.vx * side).toBeLessThan(0)
+    expect(controller.ball.vy).toBeCloseTo(expectedVerticalVelocity, 5)
     expect(side === -1 ? controller.ball.x >= innerFace + controller.ball.r : controller.ball.x <= innerFace - controller.ball.r).toBe(true)
     expect(controller.touchedSurface).toBe(true)
+  })
+
+  it.each([-1, 1] as const)('wraps without an impact when the ball clears the visible backboard on side %s', (side) => {
+    const { controller } = makeController()
+    const size = Math.min(190, 390 * .49)
+    controller.target.side = side
+    controller.target.x = side === -1 ? size * (.29 + .025) : 390 - size * (.29 + .025)
+    const boardTop = controller.target.y - size * .48
+    controller.ball.x = side === -1 ? .5 : 389.5
+    controller.ball.y = boardTop - controller.ball.r - 2
+    controller.ball.vx = side * 160
+    controller.ball.vy = 0
+    controller.touchedSurface = false
+    const startingY = controller.ball.y
+
+    controller.update(.01)
+
+    expect(side === -1 ? controller.ball.x > 380 : controller.ball.x < 10).toBe(true)
+    expect(controller.ball.vx).toBe(side * 160)
+    expect(controller.ball.vy).toBeGreaterThan(0)
+    expect(controller.ball.y).toBeGreaterThan(startingY)
+    expect(controller.touchedSurface).toBe(false)
   })
 
   it('catches high-speed rim impacts without unstable repeated acceleration', () => {
