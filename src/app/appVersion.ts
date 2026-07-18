@@ -1,8 +1,8 @@
-export const APP_VERSION = '0.2.1'
+export const APP_VERSION = '0.2.2'
 
 export const UPDATE_INFO = {
   title: '새로운 플레이가 도착했어요',
-  description: '더 자연스러운 Hoop Flight와 매끄럽게 이어지는 Loop Hoops를 만나보세요.',
+  description: '더 편안해진 Dunk Climb 조준과 매끄러운 Loop Hoops 화면 이동을 만나보세요.',
   addedGames: ['hoop-flight', 'dunk-climb', 'loop-hoops', 'crossing-rush', 'neon-escape', 'perfect-stack', 'pin-core', 'pocket-golf'],
-  changes: ['Hoop Flight 포물선·림 충돌 개선', 'Hoop Flight 천장 게임 종료 제거', 'Loop Hoops 연결부·화면 경계 충돌 개선'],
+  changes: ['Dunk Climb 발사 세기 조정', 'Dunk Climb 벽 반사 조준 경로 추가', 'Loop Hoops 좌우 화면 이동 안정화'],
 } as const

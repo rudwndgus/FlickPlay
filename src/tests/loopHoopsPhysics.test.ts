@@ -10,6 +10,7 @@ type LoopController = GameController & {
   rimHits: number
   touchedSurface: boolean
   trail: Array<{ x: number; y: number; life: number }>
+  wrapGraceSide: -1 | 1 | null
   scoreEffect: { x: number; y: number; life: number; label: string; points: number; clean: boolean; streak: number }
   getHoopConnectorGeometry: () => { start: { x: number; y: number }; end: { x: number; y: number }; radius: number }
   getHoopConnectorGeometries: () => Array<{ start: { x: number; y: number }; end: { x: number; y: number }; radius: number }>
@@ -76,6 +77,26 @@ describe('Loop Hoops physics', () => {
     expect(controller.wrappedRenderOffsets(3, controller.ball.r)).toEqual([0, 390])
     expect(controller.wrappedRenderOffsets(387, controller.ball.r)).toEqual([0, -390])
     expect(controller.wrappedRenderOffsets(195, controller.ball.r)).toEqual([0])
+  })
+
+  it.each([-1, 1] as const)('preserves the vertical path while emerging beside the %s backboard', (side) => {
+    const { controller } = makeController()
+    const size = Math.min(190, 390 * .49)
+    controller.target.side = side
+    controller.target.x = side === -1 ? size * (.29 + .025) : 390 - size * (.29 + .025)
+    controller.target.y = 330
+    controller.ball.x = side === -1 ? 389.5 : .5
+    controller.ball.y = controller.target.y - size * .48 - 8
+    controller.ball.vx = side === -1 ? 160 : -160
+    controller.ball.vy = 0
+    const startingY = controller.ball.y
+
+    controller.update(.04)
+
+    expect(controller.wrapGraceSide).toBe(side)
+    expect(controller.ball.y).toBeGreaterThan(startingY)
+    expect(controller.ball.vy).toBeGreaterThan(0)
+    expect(controller.ball.vx).toBe(side === -1 ? 160 : -160)
   })
 
   it('ends only when the timer is depleted', () => {
