@@ -30,7 +30,7 @@ export function GameCanvas({ game, preview = false, active = true, paused = fals
     controllerRef.current = controller
     let frame = 0, last = performance.now(), cssWidth = 0, cssHeight = 0
     const resize = () => {
-      const rect = canvas.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1)
+      const rect = canvas.getBoundingClientRect(), dprLimit = game.id === 'perfect-stack' ? 1.5 : 2, dpr = Math.min(dprLimit, window.devicePixelRatio || 1)
       cssWidth = rect.width; cssHeight = rect.height; canvas.width = Math.round(cssWidth * dpr); canvas.height = Math.round(cssHeight * dpr); controller.resize(cssWidth, cssHeight, dpr)
     }
     const observer = new ResizeObserver(resize); observer.observe(canvas); resize()
