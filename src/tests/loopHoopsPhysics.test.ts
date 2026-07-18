@@ -99,6 +99,39 @@ describe('Loop Hoops physics', () => {
     expect(controller.ball.vx).toBe(side === -1 ? 160 : -160)
   })
 
+  it.each([
+    [-1, 1 / 30], [-1, 1 / 60], [-1, 1 / 120],
+    [1, 1 / 30], [1, 1 / 60], [1, 1 / 120],
+  ] as const)('does not create a tap-like bounce before crossing side %s at %s second frames', (side, frameTime) => {
+    const { controller } = makeController()
+    controller.target.side = side
+    controller.target.x = side === -1 ? Math.min(190, 390 * .49) * (.29 + .025) : 390 - Math.min(190, 390 * .49) * (.29 + .025)
+    const activeConnector = controller.getHoopConnectorGeometry()
+    const center = {
+      x: (activeConnector.start.x + activeConnector.end.x) * .5,
+      y: (activeConnector.start.y + activeConnector.end.y) * .5,
+    }
+    const segmentX = activeConnector.end.x - activeConnector.start.x
+    const segmentY = activeConnector.end.y - activeConnector.start.y
+    const segmentLength = Math.hypot(segmentX, segmentY)
+    const courtNormal = { x: -side * segmentY / segmentLength, y: side * segmentX / segmentLength }
+    const clearance = controller.ball.r + activeConnector.radius + .5
+    controller.ball.x = center.x + courtNormal.x * clearance
+    controller.ball.y = center.y + courtNormal.y * clearance
+    controller.ball.vx = side * 160
+    controller.ball.vy = 0
+    controller.touchedSurface = false
+    const startingY = controller.ball.y
+
+    controller.update(frameTime)
+
+    expect(controller.wrapGraceSide).toBe(side)
+    expect(controller.ball.vx).toBe(side * 160)
+    expect(controller.ball.vy).toBeGreaterThan(0)
+    expect(controller.ball.y).toBeGreaterThan(startingY)
+    expect(controller.touchedSurface).toBe(false)
+  })
+
   it('ends only when the timer is depleted', () => {
     const { controller, onFinish } = makeController()
     controller.timeLeft = .0001
