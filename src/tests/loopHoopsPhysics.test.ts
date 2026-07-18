@@ -9,8 +9,11 @@ type LoopController = GameController & {
   cleanStreak: number
   rimHits: number
   touchedSurface: boolean
+  trail: Array<{ x: number; y: number; life: number }>
   scoreEffect: { x: number; y: number; life: number; label: string; points: number; clean: boolean; streak: number }
   getHoopConnectorGeometry: () => { start: { x: number; y: number }; end: { x: number; y: number }; radius: number }
+  getHoopConnectorGeometries: () => Array<{ start: { x: number; y: number }; end: { x: number; y: number }; radius: number }>
+  wrappedRenderOffsets: (x: number, radius: number) => number[]
 }
 
 const makeController = () => {
@@ -22,12 +25,12 @@ const makeController = () => {
 }
 
 describe('Loop Hoops physics', () => {
-  it('uses the same immediate tap impulse as Hoop Flight', () => {
+  it('uses the same tap impulse as Hoop Flight without teleporting', () => {
     const { controller } = makeController()
     const previousY = controller.ball.y
     controller.pointerDown(0, 0)
 
-    expect(controller.ball.y).toBe(previousY - 8)
+    expect(controller.ball.y).toBe(previousY)
     expect(controller.ball.vy).toBe(-570)
     expect(controller.ball.kick).toBe(1)
   })
@@ -46,24 +49,33 @@ describe('Loop Hoops physics', () => {
   it('wraps through both open side edges without bouncing', () => {
     const { controller } = makeController()
     controller.target.side = 1; controller.target.x = 390 - 82
-    controller.ball.x = -controller.ball.r - 2; controller.ball.y = 600
+    controller.ball.x = .5; controller.ball.y = 600
     controller.ball.vx = -120; controller.ball.vy = 0; controller.touchedSurface = false
 
     controller.update(.01)
 
-    expect(controller.ball.x).toBeGreaterThan(390 - controller.ball.r)
+    expect(controller.ball.x).toBeCloseTo(389.3, 5)
     expect(controller.ball.vx).toBe(-120)
     expect(controller.touchedSurface).toBe(false)
+    expect(controller.trail[0].x).toBeCloseTo(controller.ball.x, 5)
 
     controller.target.side = -1; controller.target.x = 82
-    controller.ball.x = 390 + controller.ball.r + 2; controller.ball.y = 600
+    controller.ball.x = 389.5; controller.ball.y = 600
     controller.ball.vx = 120; controller.ball.vy = 0; controller.touchedSurface = false
 
     controller.update(.01)
 
-    expect(controller.ball.x).toBeLessThan(controller.ball.r)
+    expect(controller.ball.x).toBeCloseTo(.7, 5)
     expect(controller.ball.vx).toBe(120)
     expect(controller.touchedSurface).toBe(false)
+  })
+
+  it('renders a matching ball copy while crossing either side boundary', () => {
+    const { controller } = makeController()
+
+    expect(controller.wrappedRenderOffsets(3, controller.ball.r)).toEqual([0, 390])
+    expect(controller.wrappedRenderOffsets(387, controller.ball.r)).toEqual([0, -390])
+    expect(controller.wrappedRenderOffsets(195, controller.ball.r)).toEqual([0])
   })
 
   it('ends only when the timer is depleted', () => {
@@ -92,8 +104,9 @@ describe('Loop Hoops physics', () => {
   it('rejects a crossing through the backboard-to-rim gap', () => {
     const { controller, onScore } = makeController()
     const previousSide = controller.target.side
-    controller.ball.x = controller.target.x - 24
-    controller.ball.y = controller.target.y - 8
+    const connector = controller.getHoopConnectorGeometries().find((item) => item.start.y === item.end.y)!
+    controller.ball.x = (connector.start.x + connector.end.x) * .5
+    controller.ball.y = connector.start.y - 8
     controller.ball.vx = 0; controller.ball.vy = 500; controller.ball.collisionCooldown = 1
 
     controller.update(.03)
@@ -121,6 +134,47 @@ describe('Loop Hoops physics', () => {
     expect(controller.ball.vx * normal.x + controller.ball.vy * normal.y).toBeGreaterThan(-200)
     expect(controller.touchedSurface).toBe(true)
     expect(controller.getScore()).toBe(0)
+  })
+
+  it.each([1 / 30, 1 / 60, 1 / 120])('blocks the horizontal backboard seam at %s second frames', (frameTime) => {
+    const { controller } = makeController()
+    const connector = controller.getHoopConnectorGeometries().find((item) => item.start.y === item.end.y)!
+    const centerX = (connector.start.x + connector.end.x) * .5
+    controller.ball.x = centerX
+    controller.ball.y = connector.start.y - controller.ball.r - connector.radius - 5
+    controller.ball.vx = 0
+    controller.ball.vy = 900
+    controller.ball.collisionCooldown = 1
+
+    controller.update(frameTime)
+
+    expect(controller.getScore()).toBe(0)
+    expect(controller.ball.y).toBeLessThan(connector.start.y)
+    expect(controller.touchedSurface).toBe(true)
+  })
+
+  it('cannot tunnel through any point of either connector at maximum speed', () => {
+    for (const connectorIndex of [0, 1]) {
+      for (const position of [.15, .35, .5, .65, .85]) {
+        const { controller } = makeController()
+        const connector = controller.getHoopConnectorGeometries()[connectorIndex]
+        const dx = connector.end.x - connector.start.x, dy = connector.end.y - connector.start.y
+        const length = Math.hypot(dx, dy), normal = { x: dy / length, y: -dx / length }
+        const center = { x: connector.start.x + dx * position, y: connector.start.y + dy * position }
+        const clearance = controller.ball.r + connector.radius + 5
+        controller.ball.x = center.x + normal.x * clearance
+        controller.ball.y = center.y + normal.y * clearance
+        controller.ball.vx = -normal.x * 860
+        controller.ball.vy = -normal.y * 860
+        controller.ball.collisionCooldown = 1
+
+        controller.update(1 / 30)
+
+        const sideDistance = (controller.ball.x - center.x) * normal.x + (controller.ball.y - center.y) * normal.y
+        expect(sideDistance).toBeGreaterThan(0)
+        expect(controller.getScore()).toBe(0)
+      }
+    }
   })
 
   it('drains the refilled timer progressively faster as the score rises', () => {

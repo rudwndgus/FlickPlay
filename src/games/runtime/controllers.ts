@@ -4,6 +4,7 @@ import { NeonVaultController } from './NeonVaultController'
 type Point = { x: number; y: number }
 const FIRE_STREAK = 3
 const MAX_CLEAN_COMBO = 5
+const MAX_PHYSICS_STEP = 1 / 120
 const LOOP_RIM_HALF = 36
 const LOOP_RIM_TUBE_RADIUS = 4
 
@@ -29,7 +30,7 @@ abstract class BaseController implements GameController {
   update(dt: number) {
     if (this.paused || this.status === 'finished') return
     this.elapsed += dt
-    this.tick(Math.min(dt, 0.033))
+    this.tick(Math.min(dt, 1 / 30))
   }
   abstract tick(dt: number): void
   abstract render(ctx: CanvasRenderingContext2D): void
@@ -72,12 +73,10 @@ class HoopFlightController extends BaseController {
   private scoreEffects: HoopScoreEffect[] = []
   private scoreFlash = 0
   private fireBurst = 0
-  private capturedHoop: Hoop | null = null
-  private captureTime = 0
 
   reset() {
     this.ball = { x: this.w * .27, y: this.h * .48, vx: 0, vy: 50, r: 20, rotation: -.15, kick: 0, collisionCooldown: 0 }
-    this.speed = 138; this.autoClock = 0; this.cleanStreak = 0; this.scoreEffects = []; this.scoreFlash = 0; this.fireBurst = 0; this.capturedHoop = null; this.captureTime = 0
+    this.speed = 138; this.autoClock = 0; this.cleanStreak = 0; this.scoreEffects = []; this.scoreFlash = 0; this.fireBurst = 0
     this.hoops = [0, 1, 2].map((i) => ({ x: this.w * .86 + i * 255, y: random(this.h * .3, this.h * .67), passed: false, pulse: 0, netSwing: 0, netVelocity: 0, netPunch: 0 }))
   }
   constructor(theme: GameTheme, options: ControllerOptions) {
@@ -88,44 +87,43 @@ class HoopFlightController extends BaseController {
   }
   pointerDown() {
     if (this.status === 'finished') return
-    // A short positional kick plus a strong, short-lived impulse makes every tap
-    // read immediately instead of easing the ball upward.
-    this.ball.y -= 8
     this.ball.vy = -570
     this.ball.kick = 1
     this.ball.rotation -= .22
-    this.captureTime = 0
-    this.capturedHoop = null
     this.options.onImpact('tap')
   }
   autopilot() { if (this.ball.y > this.h * .47 || this.ball.vy > 210) this.pointerDown() }
   tick(dt: number) {
     if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .42) { this.autoClock = 0; this.autopilot() } }
-    const previousY = this.ball.y
-    if (this.captureTime > 0 && this.capturedHoop) {
-      const pull = Math.min(1, dt * 15)
-      this.ball.x += (this.capturedHoop.x - this.ball.x) * pull
-      this.ball.vx *= Math.pow(.04, dt)
-      this.ball.vy += (330 - this.ball.vy) * Math.min(1, dt * 8)
-      this.captureTime -= dt
-      if (this.captureTime <= 0) this.capturedHoop = null
-    }
-    this.ball.vy = Math.min(760, this.ball.vy + 1850 * dt)
-    const anchorX = this.w * .27
-    this.ball.vx += (anchorX - this.ball.x) * 11 * dt
-    this.ball.vx *= Math.pow(.16, dt)
-    this.ball.x += this.ball.vx * dt
-    this.ball.y += this.ball.vy * dt
     this.ball.kick = Math.max(0, this.ball.kick - dt * 7.5)
-    this.ball.collisionCooldown = Math.max(0, this.ball.collisionCooldown - dt)
     this.scoreFlash = Math.max(0, this.scoreFlash - dt * 2.8)
     this.fireBurst = Math.max(0, this.fireBurst - dt * 1.45)
     this.scoreEffects.forEach((effect) => { effect.life -= dt; effect.x -= this.speed * dt })
     this.scoreEffects = this.scoreEffects.filter((effect) => effect.life > 0)
     this.ball.rotation += dt * (2.4 + Math.abs(this.ball.vy) * .002)
     this.speed = Math.min(235, 138 + this.elapsed * 1.65)
+
+    const steps = Math.max(1, Math.ceil(dt / MAX_PHYSICS_STEP)), step = dt / steps
+    for (let index = 0; index < steps && this.status !== 'finished'; index++) this.stepPhysics(step)
+    if (this.status === 'finished') return
+
+    const last = this.hoops[this.hoops.length - 1]
+    if (last.x < this.w - 180) this.hoops.push({ x: last.x + random(220, 295), y: random(this.h * .25, this.h * .68), passed: false, pulse: 0, netSwing: 0, netVelocity: 0, netPunch: 0 })
+    this.hoops = this.hoops.filter((hoop) => hoop.x > -100)
+  }
+  private stepPhysics(dt: number) {
+    const previous = { x: this.ball.x, y: this.ball.y }
+    this.ball.collisionCooldown = Math.max(0, this.ball.collisionCooldown - dt)
+    this.ball.vy = Math.min(760, this.ball.vy + 1850 * dt)
+    const anchorX = this.w * .27
+    const horizontalAcceleration = (anchorX - this.ball.x) * 20 - this.ball.vx * 9
+    this.ball.vx = clamp(this.ball.vx + horizontalAcceleration * dt, -520, 360)
+    this.ball.x += this.ball.vx * dt
+    this.ball.y += this.ball.vy * dt
+
     let missedHoop = false
     for (const hoop of this.hoops) {
+      const previousHoopX = hoop.x
       hoop.x -= this.speed * dt; hoop.pulse = Math.max(0, hoop.pulse - dt)
       hoop.netVelocity = (hoop.netVelocity ?? 0) - (hoop.netSwing ?? 0) * 48 * dt
       hoop.netVelocity *= Math.pow(.018, dt)
@@ -133,8 +131,12 @@ class HoopFlightController extends BaseController {
       hoop.netPunch = Math.max(0, (hoop.netPunch ?? 0) - dt * 2.7)
       const metrics = this.getHoopMetrics(hoop)
       this.collideWithHoop(metrics)
-      const insideOpening = Math.abs(this.ball.x - hoop.x) < metrics.rimHalf - this.ball.r * .25
-      const crossedRimPlane = previousY <= hoop.y && this.ball.y > hoop.y
+      const travelY = this.ball.y - previous.y
+      const crossedRimPlane = travelY > 0 && previous.y <= hoop.y && this.ball.y > hoop.y
+      const crossingTime = crossedRimPlane ? clamp((hoop.y - previous.y) / travelY, 0, 1) : 0
+      const crossingBallX = previous.x + (this.ball.x - previous.x) * crossingTime
+      const crossingHoopX = previousHoopX + (hoop.x - previousHoopX) * crossingTime
+      const insideOpening = Math.abs(crossingBallX - crossingHoopX) < metrics.rimHalf - this.ball.r * .25
       if (!hoop.passed && insideOpening && crossedRimPlane && this.ball.vy > 0) {
         hoop.passed = true; hoop.pulse = 1
         const clean = !hoop.rimTouched && Math.abs(this.ball.x - hoop.x) < metrics.rimHalf * .42
@@ -145,9 +147,6 @@ class HoopFlightController extends BaseController {
         this.options.onImpact(clean ? 'perfect' : 'score')
         hoop.netVelocity = clamp((this.ball.x - hoop.x) * 5.5 + 175, -220, 220)
         hoop.netPunch = 1
-        this.capturedHoop = hoop
-        this.captureTime = .3
-        this.ball.vy = Math.min(this.ball.vy, 365)
         this.ball.kick = Math.max(this.ball.kick, .72)
         this.scoreEffects.push({ x: hoop.x, y: hoop.y, life: 1, label, clean, streak: this.cleanStreak })
         this.scoreFlash = clean ? .9 : .58
@@ -156,15 +155,14 @@ class HoopFlightController extends BaseController {
         missedHoop = true
         break
       }
-      if (insideOpening && this.ball.y > hoop.y + 5 && this.ball.y < hoop.y + metrics.height * .68) {
-        this.ball.vx *= Math.pow(.55, dt)
+      const insideNet = Math.abs(this.ball.x - hoop.x) < metrics.rimHalf - this.ball.r * .25
+      if (hoop.passed && insideNet && this.ball.y > hoop.y + 5 && this.ball.y < hoop.y + metrics.height * .68) {
+        this.ball.vx *= Math.pow(.72, dt)
+        this.ball.vy *= Math.pow(.88, dt)
       }
     }
     if (missedHoop) { this.finish(); return }
-    const last = this.hoops[this.hoops.length - 1]
-    if (last.x < this.w - 180) this.hoops.push({ x: last.x + random(220, 295), y: random(this.h * .25, this.h * .68), passed: false, pulse: 0, netSwing: 0, netVelocity: 0, netPunch: 0 })
-    this.hoops = this.hoops.filter((hoop) => hoop.x > -100)
-    if (this.ball.y > this.h - 75 || this.ball.y < 42 || this.ball.x + this.ball.r < 0) this.finish()
+    if (this.ball.y > this.h - 75 || this.ball.x + this.ball.r < 0) this.finish()
   }
   render(ctx: CanvasRenderingContext2D) {
     const paper = ctx.createLinearGradient(0, 0, 0, this.h)
@@ -205,7 +203,7 @@ class HoopFlightController extends BaseController {
     return { hoop, width, height, left, top, rimHalf: width * .36 }
   }
   private collideWithHoop(metrics: ReturnType<HoopFlightController['getHoopMetrics']>) {
-    if (this.ball.collisionCooldown > 0) return
+    const canRegisterImpact = this.ball.collisionCooldown <= 0
     const posts = [metrics.hoop.x - metrics.rimHalf, metrics.hoop.x + metrics.rimHalf]
     for (const postX of posts) {
       const dx = this.ball.x - postX, dy = this.ball.y - metrics.hoop.y
@@ -216,12 +214,20 @@ class HoopFlightController extends BaseController {
       const relativeX = this.ball.vx + this.speed
       const alongNormal = relativeX * nx + this.ball.vy * ny
       if (alongNormal < 0) {
-        const bounce = 1.68 * alongNormal
+        const bounce = (canRegisterImpact ? 1.68 : 1.15) * alongNormal
         this.ball.vx = relativeX - bounce * nx - this.speed
         this.ball.vy -= bounce * ny
       }
-      this.ball.vx = Math.min(this.ball.vx, -155)
-      this.registerHoopImpact(metrics.hoop); return
+      const relativeSpeed = Math.hypot(this.ball.vx + this.speed, this.ball.vy)
+      if (relativeSpeed > 780) {
+        const scale = 780 / relativeSpeed
+        this.ball.vx = (this.ball.vx + this.speed) * scale - this.speed
+        this.ball.vy *= scale
+      }
+      metrics.hoop.rimTouched = true
+      this.cleanStreak = 0
+      if (canRegisterImpact) this.registerHoopImpact(metrics.hoop)
+      return
     }
   }
   private registerHoopImpact(hoop: Hoop) {
@@ -562,7 +568,6 @@ class LoopHoopsController extends BaseController {
   }
   pointerDown() {
     if (this.status === 'finished') return
-    this.ball.y -= 8
     this.ball.vy = -570
     this.ball.vx = this.target.side * Math.min(245, 175 + this.score * 2.5)
     this.ball.kick = 1
@@ -575,31 +580,37 @@ class LoopHoopsController extends BaseController {
     this.timeLeft = Math.max(0, this.timeLeft - drainRate * dt)
     if (this.timeLeft <= 0) { this.finish(); return }
 
-    const previous = { x: this.ball.x, y: this.ball.y }
-    this.ball.vy = Math.min(900, this.ball.vy + 1850 * dt)
-    this.ball.x += this.ball.vx * dt; this.ball.y += this.ball.vy * dt
     this.ball.rotation += dt * (4 + Math.abs(this.ball.vx) * .012)
     this.ball.kick = Math.max(0, this.ball.kick - dt * 7.5)
-    this.ball.collisionCooldown = Math.max(0, this.ball.collisionCooldown - dt)
     this.target.pulse = Math.max(0, this.target.pulse - dt * 2.4)
     this.target.netPunch = Math.max(0, this.target.netPunch - dt * 3)
     this.scoreEffect.life = Math.max(0, this.scoreEffect.life - dt * 1.35)
     this.trail.forEach((point) => { point.life -= dt }); this.trail = this.trail.filter((point) => point.life > 0)
+
+    const steps = Math.max(1, Math.ceil(dt / MAX_PHYSICS_STEP)), step = dt / steps
+    for (let index = 0; index < steps && this.status !== 'finished'; index++) this.stepPhysics(step)
     this.trail.unshift({ x: this.ball.x, y: this.ball.y, life: this.cleanStreak >= FIRE_STREAK ? .62 : .3 })
     if (this.trail.length > (this.cleanStreak >= FIRE_STREAK ? 22 : 11)) this.trail.pop()
-
+  }
+  private stepPhysics(dt: number) {
+    const previous = { x: this.ball.x, y: this.ball.y }
+    this.ball.collisionCooldown = Math.max(0, this.ball.collisionCooldown - dt)
+    this.ball.vy = Math.min(900, this.ball.vy + 1850 * dt)
+    this.ball.x += this.ball.vx * dt
+    this.ball.y += this.ball.vy * dt
     const ceiling = 104 + this.ball.r, floor = this.h - 74 - this.ball.r
     if (this.ball.y < ceiling) { this.ball.y = ceiling; this.ball.vy = Math.abs(this.ball.vy) * .72; this.touchedSurface = true; this.cleanStreak = 0 }
     if (this.ball.y > floor) {
       this.ball.y = floor; this.ball.vy = -Math.max(350, Math.abs(this.ball.vy) * .72); this.ball.kick = .55; this.touchedSurface = true; this.cleanStreak = 0; this.options.onImpact('tap')
     }
 
-    this.collideWithRimUnderside(previous)
-    this.collideWithHoopConnector(previous)
-    this.collideWithBackboard(previous)
-    this.collideWithRim(previous)
-    if (this.crossedInsideRim(previous)) this.scoreGoal()
+    const hitObstacle = this.collideWithRimUnderside(previous)
+      || this.collideWithHoopConnector()
+      || this.collideWithBackboard(previous)
+      || this.collideWithRim(previous)
+    if (!hitObstacle && this.crossedInsideRim(previous)) this.scoreGoal()
     this.wrapAcrossSideEdges()
+    if (hitObstacle) this.limitLoopBallSpeed()
   }
   render(ctx: CanvasRenderingContext2D) {
     const backdrop = ctx.createRadialGradient(this.w * .5, this.h * .48, 40, this.w * .5, this.h * .48, this.h * .72)
@@ -609,8 +620,10 @@ class LoopHoopsController extends BaseController {
     this.drawTimer(ctx)
     this.drawSideHoopImage(ctx, false)
     this.drawBallTrail(ctx)
-    ctx.fillStyle = 'rgba(20,10,6,.34)'; ctx.beginPath(); ctx.ellipse(this.ball.x, this.h - 70, 22 + Math.abs(this.ball.y - (this.h - 70)) * .015, 7, 0, 0, Math.PI * 2); ctx.fill()
-    ctx.save(); ctx.translate(this.ball.x, this.ball.y); ctx.scale(1 + this.ball.kick * .16, 1 - this.ball.kick * .1); drawBasketball(ctx, 0, 0, this.ball.r, this.ball.rotation, this.cleanStreak >= FIRE_STREAK); ctx.restore()
+    for (const offset of this.wrappedRenderOffsets(this.ball.x, this.ball.r)) {
+      ctx.fillStyle = 'rgba(20,10,6,.34)'; ctx.beginPath(); ctx.ellipse(this.ball.x + offset, this.h - 70, 22 + Math.abs(this.ball.y - (this.h - 70)) * .015, 7, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.save(); ctx.translate(this.ball.x + offset, this.ball.y); ctx.scale(1 + this.ball.kick * .16, 1 - this.ball.kick * .1); drawBasketball(ctx, 0, 0, this.ball.r, this.ball.rotation, this.cleanStreak >= FIRE_STREAK); ctx.restore()
+    }
     this.drawSideHoopImage(ctx, true)
     this.drawScoreEffect(ctx)
     ctx.fillStyle = 'rgba(255,255,255,.62)'; ctx.font = '800 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('TAP TO BOUNCE  •  BEAT THE CLOCK', this.w * .5, this.h - 38)
@@ -640,7 +653,6 @@ class LoopHoopsController extends BaseController {
     return openingHalf > 0 && Math.abs(crossingX - this.target.x) <= openingHalf
   }
   private collideWithBackboard(previous: Point) {
-    if (this.ball.collisionCooldown > 0) return
     const size = this.sideHoopSize()
     const centerX = this.target.x + this.target.side * size * .29
     const halfWidth = size * .025, top = this.target.y - size * .48, bottom = this.target.y + size * .25
@@ -653,7 +665,7 @@ class LoopHoopsController extends BaseController {
       ? previous.x - this.ball.r >= innerFace && this.ball.x - this.ball.r < innerFace
       : previous.x + this.ball.r <= innerFace && this.ball.x + this.ball.r > innerFace
     const withinFace = this.ball.y >= top - this.ball.r && this.ball.y <= bottom + this.ball.r
-    if (!crossedInnerFace && (distanceToBoard <= 0 || distanceToBoard >= this.ball.r)) return
+    if (!crossedInnerFace && (distanceToBoard <= 0 || distanceToBoard >= this.ball.r)) return false
 
     let nx = dx / Math.max(.001, distanceToBoard), ny = dy / Math.max(.001, distanceToBoard)
     if (crossedInnerFace && withinFace) { nx = -this.target.side; ny = 0; this.ball.x = innerFace + nx * (this.ball.r + .5) }
@@ -662,13 +674,13 @@ class LoopHoopsController extends BaseController {
     if (impact < 0) {
       this.ball.vx -= 1.68 * impact * nx; this.ball.vy -= 1.68 * impact * ny
       this.ball.vx *= .96; this.ball.vy *= .96
-      this.stabilizeBallAfterImpact()
     }
+    this.stabilizeBallAfterImpact(false)
+    return true
   }
   private wrapAcrossSideEdges() {
-    const wrapSpan = this.w + this.ball.r * 2
-    if (this.ball.x + this.ball.r < 0) this.ball.x += wrapSpan
-    else if (this.ball.x - this.ball.r > this.w) this.ball.x -= wrapSpan
+    if (this.ball.x < 0) this.ball.x += this.w
+    else if (this.ball.x >= this.w) this.ball.x -= this.w
   }
   private sideHoopSize() { return Math.min(190, this.w * .49) }
   private sideHoopAnchorX(side: -1 | 1) {
@@ -684,39 +696,45 @@ class LoopHoopsController extends BaseController {
       radius: size * .024,
     }
   }
-  private collideWithHoopConnector(previous: Point) {
-    const connector = this.getHoopConnectorGeometry(), wasCooling = this.ball.collisionCooldown > 0
-    for (let index = 0; index <= 4; index++) {
-      const t = index / 4
-      const x = connector.start.x + (connector.end.x - connector.start.x) * t
-      const y = connector.start.y + (connector.end.y - connector.start.y) * t
-      if (!this.resolveSweptLoopCircle(previous, x, y, connector.radius, 1.68)) continue
-      if (!wasCooling) this.stabilizeBallAfterImpact()
-      else {
-        this.cleanStreak = 0; this.touchedSurface = true; this.ball.kick = Math.max(this.ball.kick, .35)
-      }
-      return
+  private getHoopConnectorGeometries() {
+    const diagonal = this.getHoopConnectorGeometry()
+    return [
+      {
+        start: { x: diagonal.start.x, y: this.target.y },
+        end: { x: this.target.x + this.target.side * LOOP_RIM_HALF, y: this.target.y },
+        radius: diagonal.radius,
+      },
+      diagonal,
+    ]
+  }
+  private collideWithHoopConnector() {
+    for (const connector of this.getHoopConnectorGeometries()) {
+      if (!this.resolveLoopCapsule(connector.start, connector.end, connector.radius, 1.68)) continue
+      this.stabilizeBallAfterImpact()
+      return true
     }
+    return false
   }
   private collideWithRimUnderside(previous: Point) {
-    if (this.ball.collisionCooldown > 0 || this.ball.vy >= 0) return
+    if (this.ball.vy >= 0) return false
     const rimHalf = LOOP_RIM_HALF, undersideY = this.target.y + 6
     const crossedUnderside = previous.y - this.ball.r >= undersideY && this.ball.y - this.ball.r < undersideY
     const beneathRim = Math.abs(this.ball.x - this.target.x) <= rimHalf + this.ball.r * .35
-    if (!crossedUnderside || !beneathRim) return
+    if (!crossedUnderside || !beneathRim) return false
 
     this.ball.y = undersideY + this.ball.r + .5
     this.ball.vy = Math.max(180, Math.abs(this.ball.vy) * .64)
     this.ball.vx *= .94
     this.stabilizeBallAfterImpact()
+    return true
   }
   private collideWithRim(previous: Point) {
-    if (this.ball.collisionCooldown > 0) return
     const rimHalf = LOOP_RIM_HALF
     for (const x of [this.target.x - rimHalf, this.target.x + rimHalf]) {
       if (!this.resolveSweptLoopCircle(previous, x, this.target.y, LOOP_RIM_TUBE_RADIUS, 1.7)) continue
-      this.stabilizeBallAfterImpact(); return
+      this.stabilizeBallAfterImpact(); return true
     }
+    return false
   }
   private resolveSweptLoopCircle(previous: Point, obstacleX: number, obstacleY: number, obstacleRadius: number, bounce: number) {
     const radius = this.ball.r + obstacleRadius
@@ -745,10 +763,41 @@ class LoopHoopsController extends BaseController {
     }
     return true
   }
-  private stabilizeBallAfterImpact() {
+  private resolveLoopCapsule(start: Point, end: Point, obstacleRadius: number, bounce: number) {
+    const segmentX = end.x - start.x, segmentY = end.y - start.y
+    const segmentLengthSquared = segmentX * segmentX + segmentY * segmentY
+    const projection = segmentLengthSquared > .0001
+      ? clamp(((this.ball.x - start.x) * segmentX + (this.ball.y - start.y) * segmentY) / segmentLengthSquared, 0, 1)
+      : 0
+    const closestX = start.x + segmentX * projection, closestY = start.y + segmentY * projection
+    let dx = this.ball.x - closestX, dy = this.ball.y - closestY
+    const radius = this.ball.r + obstacleRadius, distanceToObstacle = Math.hypot(dx, dy)
+    if (distanceToObstacle >= radius) return false
+    if (distanceToObstacle < .001) {
+      const velocity = Math.max(.001, Math.hypot(this.ball.vx, this.ball.vy))
+      dx = -this.ball.vx / velocity; dy = -this.ball.vy / velocity
+    } else {
+      dx /= distanceToObstacle; dy /= distanceToObstacle
+    }
+    this.ball.x = closestX + dx * (radius + .5); this.ball.y = closestY + dy * (radius + .5)
+    const impact = this.ball.vx * dx + this.ball.vy * dy
+    if (impact < 0) {
+      this.ball.vx -= bounce * impact * dx; this.ball.vy -= bounce * impact * dy
+      this.ball.vx *= .96; this.ball.vy *= .96
+    }
+    return true
+  }
+  private limitLoopBallSpeed() {
     const speed = Math.hypot(this.ball.vx, this.ball.vy), maxSpeed = 860
     if (speed > maxSpeed) { this.ball.vx *= maxSpeed / speed; this.ball.vy *= maxSpeed / speed }
-    this.ball.collisionCooldown = .085; this.rimHits++; this.cleanStreak = 0; this.touchedSurface = true; this.ball.kick = Math.max(this.ball.kick, .4); this.options.onImpact('tap')
+  }
+  private stabilizeBallAfterImpact(countsAsRim = true) {
+    this.limitLoopBallSpeed()
+    this.cleanStreak = 0; this.touchedSurface = true; this.ball.kick = Math.max(this.ball.kick, .4)
+    if (this.ball.collisionCooldown > 0) return
+    this.ball.collisionCooldown = .065
+    if (countsAsRim) this.rimHits++
+    this.options.onImpact('tap')
   }
   private drawTimer(ctx: CanvasRenderingContext2D) {
     const x = 58, y = 98, width = this.w - 116, height = 25
@@ -778,9 +827,16 @@ class LoopHoopsController extends BaseController {
       const fire = this.cleanStreak >= FIRE_STREAK, alpha = point.life / (fire ? .62 : .3)
       ctx.fillStyle = fire ? (index < 5 ? `rgba(255,238,30,${alpha * .78})` : index < 13 ? `rgba(255,93,20,${alpha * .55})` : `rgba(196,30,25,${alpha * .3})`) : `rgba(26,15,12,${alpha * .16})`
       ctx.shadowColor = fire ? (index < 6 ? '#fff02b' : '#ff4b1f') : 'transparent'; ctx.shadowBlur = fire ? 18 : 0
-      ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(4, this.ball.r - index * .48), 0, Math.PI * 2); ctx.fill()
+      const radius = Math.max(4, this.ball.r - index * .48)
+      for (const offset of this.wrappedRenderOffsets(point.x, radius)) { ctx.beginPath(); ctx.arc(point.x + offset, point.y, radius, 0, Math.PI * 2); ctx.fill() }
     })
     ctx.shadowBlur = 0
+  }
+  private wrappedRenderOffsets(x: number, radius: number) {
+    const offsets = [0]
+    if (x < radius) offsets.push(this.w)
+    if (x > this.w - radius) offsets.push(-this.w)
+    return offsets
   }
   private drawScoreEffect(ctx: CanvasRenderingContext2D) {
     if (this.scoreEffect.life <= 0) return
