@@ -51,12 +51,12 @@ describe('AXEBOUND physics', () => {
 
   it('sticks into a real rock and launches the same axe from that position', () => {
     const { controller } = makeController()
-    controller.axe.state = 'flying'; controller.axe.x = 360; controller.axe.y = 6307
+    controller.axe.state = 'flying'; controller.axe.x = 197.5; controller.axe.y = 6475
     controller.axe.vx = 0; controller.axe.vy = -500; controller.axe.angle = -Math.PI / 2; controller.axe.angularVelocity = 0; controller.axe.flightTime = 0
     controller.update(.04)
 
     expect(controller.axe.state).toBe('stuck')
-    expect(controller.axe.stuckObjectId).toBe('zone1-rest')
+    expect(controller.axe.stuckObjectId).toBe('s2-left-02')
 
     const anchor = { x: controller.axe.x, y: controller.axe.y }
     controller.pointerDown(300, 300); controller.pointerUp(300, 420)
@@ -102,7 +102,7 @@ describe('AXEBOUND physics', () => {
     for (let index = 0; index < 80; index++) controller.update(.04)
 
     expect(controller.getStatus()).toBe('playing')
-    expect(controller.axe.y).toBeLessThan(7155)
+    expect(controller.axe.y).toBeLessThan(8600)
     expect(onFinish).not.toHaveBeenCalled()
   })
 
@@ -119,7 +119,7 @@ describe('AXEBOUND physics', () => {
     expect(onFinish).toHaveBeenCalledWith(1000)
   })
 
-  it('contains a continuous eight-zone world with both readable surface classes', () => {
+  it('contains a continuous six-image world with both readable surface classes', () => {
     expect(new Set(AXEBOUND_LEVEL_OBJECTS.map((object) => object.id)).size).toBe(AXEBOUND_LEVEL_OBJECTS.length)
     expect(AXEBOUND_LEVEL_OBJECTS.some((object) => object.y > 7000)).toBe(true)
     expect(AXEBOUND_LEVEL_OBJECTS.some((object) => object.y < 150)).toBe(true)
@@ -129,12 +129,12 @@ describe('AXEBOUND physics', () => {
     for (const type of ['movingPlatform', 'rotatingBeam', 'swingingBlock', 'fallingRock', 'goal'] as const) expect(objectTypes.has(type)).toBe(true)
   })
 
-  it('matches the reference map progression from the pit to the crown', () => {
+  it('stacks the six supplied map images in exact bottom-to-top order', () => {
     expect(AXEBOUND_ZONES.map((zone) => zone.name)).toEqual([
-      'THE PIT', 'THE CHANDELIER', 'BROKEN STEPS', 'CRYSTAL VEIN', 'IRON THROAT', 'WIND SHAFT', 'FALSE SUMMIT', 'THE CROWN',
+      '01 · FLOODED PIT', '02 · CRYSTAL RUINS', '03 · IRON SHAFT', '04 · CHANDELIER HALL', '05 · CRYSTAL ASCENT', '06 · THE CROWN',
     ])
     const ids = new Set(AXEBOUND_LEVEL_OBJECTS.map((object) => object.id))
-    for (const id of ['pit-rotating-beam', 'chandelier-swing-01', 'step-moving-01', 'crystal-right-lower', 'iron-rotating-wood', 'wind-moving-rock', 'false-falling-rock', 'summit-goal']) expect(ids.has(id)).toBe(true)
+    for (const id of ['s1-moving-lift', 's2-falling-crate', 's3-rotating-beam', 's4-center-chandelier', 's5-hanging-lift', 'summit-goal']) expect(ids.has(id)).toBe(true)
   })
 
   it('provides a summit route whose consecutive stickable targets stay in throw range', () => {

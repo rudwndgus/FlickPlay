@@ -138,21 +138,21 @@ const pointContact = (point: AxeBoundPoint, radius: number, object: AxeBoundLeve
 }
 
 const materialPalette: Record<AxeBoundMaterial, { fill: string; edge: string }> = {
-  rock: { fill: '#25102f', edge: '#ff278c' },
-  wood: { fill: '#52291e', edge: '#f39a25' },
-  metal: { fill: '#1b2741', edge: '#8896be' },
-  crystal: { fill: '#471052', edge: '#f42aa1' },
+  rock: { fill: '#1d0d2a', edge: '#81245e' },
+  wood: { fill: '#422019', edge: '#d87925' },
+  metal: { fill: '#182037', edge: '#7484a9' },
+  crystal: { fill: '#3b0d4e', edge: '#d92a99' },
   spikeRock: { fill: '#15091e', edge: '#9d155f' },
   ice: { fill: '#112b48', edge: '#38bde3' },
 }
 
 const MAP_LANTERNS: readonly AxeBoundPoint[] = [
-  { x: 355, y: 6960 }, { x: 505, y: 6170 }, { x: 125, y: 5520 }, { x: 420, y: 4620 },
-  { x: 265, y: 3570 }, { x: 360, y: 2470 }, { x: 520, y: 1660 }, { x: 315, y: 720 }, { x: 360, y: 220 },
-]
-const MAP_BANNERS: readonly (AxeBoundPoint & { color: string })[] = [
-  { x: 205, y: 6860, color: '#77204b' }, { x: 540, y: 6080, color: '#9a1c59' },
-  { x: 125, y: 4860, color: '#3e256d' }, { x: 505, y: 1510, color: '#7c174d' },
+  { x: 150, y: 8400 }, { x: 540, y: 8240 }, { x: 365, y: 8030 }, { x: 180, y: 7780 }, { x: 535, y: 7540 }, { x: 350, y: 7270 },
+  { x: 145, y: 6970 }, { x: 565, y: 6720 }, { x: 320, y: 6490 }, { x: 150, y: 6200 }, { x: 545, y: 5950 }, { x: 360, y: 5790 },
+  { x: 365, y: 5550 }, { x: 135, y: 5280 }, { x: 565, y: 4980 }, { x: 320, y: 4680 }, { x: 530, y: 4410 },
+  { x: 125, y: 4160 }, { x: 550, y: 3920 }, { x: 360, y: 3690 }, { x: 170, y: 3400 }, { x: 535, y: 3120 }, { x: 350, y: 2910 },
+  { x: 145, y: 2700 }, { x: 560, y: 2420 }, { x: 330, y: 2150 }, { x: 150, y: 1870 }, { x: 545, y: 1600 }, { x: 360, y: 1450 },
+  { x: 150, y: 1280 }, { x: 550, y: 1010 }, { x: 350, y: 730 }, { x: 150, y: 480 }, { x: 555, y: 300 }, { x: 360, y: 135 },
 ]
 
 export class AxeBoundController implements GameController {
@@ -177,7 +177,7 @@ export class AxeBoundController implements GameController {
   private axeSprite: HTMLImageElement | null = null
   private launchIgnoreId: string | null = null
   private launchIgnoreTimer = 0
-  axe = { state: 'ready' as AxeState, x: 360, y: 7042, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor' as string | null, stuckLocal: { x: 0, y: -58 }, stuckTime: 0 }
+  axe = { state: 'ready' as AxeState, x: 142.5, y: 8440, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor' as string | null, stuckLocal: { x: 0, y: -45 }, stuckTime: 0 }
   aimStart: AxeBoundPoint | null = null
   aimCurrent: AxeBoundPoint | null = null
   falls = 0
@@ -296,7 +296,7 @@ export class AxeBoundController implements GameController {
 
   private resetAxeAtFloor(countFall: boolean) {
     if (countFall) { this.falls += 1; this.fallArmed = false }
-    this.axe = { state: 'ready', x: 360, y: 7042, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor', stuckLocal: { x: 0, y: -58 }, stuckTime: 0 }
+    this.axe = { state: 'ready', x: 142.5, y: 8440, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor', stuckLocal: { x: 0, y: -45 }, stuckTime: 0 }
   }
 
   private findPointContact(point: AxeBoundPoint, radius: number) {
@@ -397,11 +397,6 @@ export class AxeBoundController implements GameController {
       ctx.fillStyle = '#170817'; ctx.strokeStyle = '#f08c22'; ctx.lineWidth = 1.5; ctx.fillRect(point.x - 6, point.y - 9, 12, 18); ctx.strokeRect(point.x - 6, point.y - 9, 12, 18)
       ctx.fillStyle = '#ffd04f'; ctx.fillRect(point.x - 2, point.y - 5, 4, 10)
     }
-    for (const banner of MAP_BANNERS) {
-      const point = this.worldToScreen(banner); if (point.y < -80 || point.y > this.h + 80) continue
-      ctx.fillStyle = banner.color; ctx.strokeStyle = 'rgba(255,67,155,.5)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(point.x - 12, point.y - 34); ctx.lineTo(point.x + 12, point.y - 34); ctx.lineTo(point.x + 12, point.y + 28); ctx.lineTo(point.x, point.y + 18); ctx.lineTo(point.x - 12, point.y + 28); ctx.closePath(); ctx.fill(); ctx.stroke()
-      ctx.fillStyle = '#d78a31'; ctx.fillRect(point.x - 2, point.y - 15, 4, 24)
-    }
   }
 
   private drawObject(ctx: CanvasRenderingContext2D, object: AxeBoundLevelObject) {
@@ -414,11 +409,11 @@ export class AxeBoundController implements GameController {
     }
     const palette = materialPalette[object.material]
     ctx.save(); ctx.translate(screen.x, screen.y); ctx.rotate(transform.rotation); ctx.scale(this.scale, this.scale)
-    ctx.fillStyle = palette.fill; ctx.strokeStyle = palette.edge; ctx.lineWidth = 5 / this.scale; ctx.shadowColor = palette.edge; ctx.shadowBlur = 10 / this.scale
+    ctx.fillStyle = palette.fill; ctx.strokeStyle = palette.edge; ctx.lineWidth = 3 / this.scale; ctx.shadowColor = palette.edge; ctx.shadowBlur = 4 / this.scale
     ctx.beginPath()
     if (object.type === 'circle') ctx.arc(0, 0, object.radius ?? object.width / 2, 0, Math.PI * 2)
     else if (object.type === 'polygon' && object.points) { ctx.moveTo(object.points[0].x, object.points[0].y); object.points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y)); ctx.closePath() }
-    else ctx.roundRect(-object.width / 2, -object.height / 2, object.width, object.height, Math.min(12, object.height * .22))
+    else ctx.roundRect(-object.width / 2, -object.height / 2, object.width, object.height, Math.min(5, object.height * .12))
     ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0
     ctx.save(); ctx.clip()
     if (object.material === 'rock' || object.material === 'spikeRock') {
@@ -443,7 +438,29 @@ export class AxeBoundController implements GameController {
       for (let y = -object.height * .35; y < object.height * .4; y += 48) { ctx.beginPath(); ctx.moveTo(-object.width * .35, y); ctx.quadraticCurveTo(0, y + 18, object.width * .35, y); ctx.stroke() }
     }
     ctx.restore(); ctx.restore()
-    if (object.type === 'goal') { ctx.save(); ctx.globalCompositeOperation = 'lighter'; const glow = ctx.createRadialGradient(screen.x, screen.y, 4, screen.x, screen.y, 70); glow.addColorStop(0, 'rgba(255,244,154,.9)'); glow.addColorStop(1, 'rgba(255,217,73,0)'); ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(screen.x, screen.y, 70, 0, Math.PI * 2); ctx.fill(); ctx.restore() }
+    if (object.material === 'rock' || object.material === 'spikeRock' || object.material === 'wood') {
+      ctx.save(); ctx.translate(screen.x, screen.y); ctx.rotate(transform.rotation); ctx.scale(this.scale, this.scale)
+      const edgeGlow = ctx.createLinearGradient(-object.width / 2, 0, object.width / 2, 0)
+      edgeGlow.addColorStop(0, object.material === 'wood' ? '#bc5d26' : '#b63479')
+      edgeGlow.addColorStop(.5, '#f19a31')
+      edgeGlow.addColorStop(1, object.material === 'wood' ? '#bc5d26' : '#b63479')
+      ctx.strokeStyle = edgeGlow; ctx.lineWidth = 3 / this.scale; ctx.shadowColor = '#e84391'; ctx.shadowBlur = 4 / this.scale
+      ctx.beginPath(); ctx.moveTo(-object.width / 2 + 4, -object.height / 2 + 2); ctx.lineTo(object.width / 2 - 4, -object.height / 2 + 2); ctx.stroke(); ctx.restore()
+    }
+    if (object.type === 'goal') this.drawSummitAltar(ctx, screen)
+  }
+
+  private drawSummitAltar(ctx: CanvasRenderingContext2D, point: AxeBoundPoint) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; const glow = ctx.createRadialGradient(point.x, point.y - 5, 3, point.x, point.y - 5, 78); glow.addColorStop(0, 'rgba(255,208,77,.68)'); glow.addColorStop(.45, 'rgba(255,77,146,.2)'); glow.addColorStop(1, 'rgba(255,217,73,0)'); ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(point.x, point.y - 5, 78, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+    ctx.save(); ctx.translate(point.x, point.y)
+    ctx.fillStyle = '#27102d'; ctx.strokeStyle = '#ff3d9d'; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(-31, -10, 62, 25, 4); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = '#e98722'; ctx.fillRect(-35, 12, 70, 5); ctx.fillStyle = '#ffcf45'; ctx.fillRect(-26, 4, 52, 4)
+    ctx.fillStyle = '#ffb62c'; ctx.strokeStyle = '#fff08c'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-19, 3); ctx.lineTo(-24, -17); ctx.lineTo(-9, -9); ctx.lineTo(0, -27); ctx.lineTo(9, -9); ctx.lineTo(24, -17); ctx.lineTo(19, 3); ctx.closePath(); ctx.fill(); ctx.stroke()
+    for (const x of [-43, 43]) {
+      ctx.fillStyle = '#4b193d'; ctx.fillRect(x - 4, -5, 8, 24); ctx.fillStyle = '#f29224'; ctx.fillRect(x - 7, -8, 14, 4)
+      const flame = 7 + Math.sin(this.elapsed * 11 + x) * 2; ctx.fillStyle = '#ff4c78'; ctx.beginPath(); ctx.moveTo(x, -9); ctx.quadraticCurveTo(x - 7, -18, x, -23 - flame); ctx.quadraticCurveTo(x + 7, -18, x, -9); ctx.fill(); ctx.fillStyle = '#ffd647'; ctx.beginPath(); ctx.moveTo(x, -11); ctx.quadraticCurveTo(x - 3, -17, x, -19 - flame * .45); ctx.quadraticCurveTo(x + 3, -17, x, -11); ctx.fill()
+    }
+    ctx.restore()
   }
 
   private drawAxe(ctx: CanvasRenderingContext2D) {
@@ -520,7 +537,7 @@ export class AxeBoundController implements GameController {
   resume() { this.paused = false; if (this.status === 'paused') this.status = 'playing' }
   restart() { this.score = 0; this.elapsed = 0; this.paused = false; this.status = 'playing'; this.reset() }
   reset() {
-    this.axe = { state: 'ready', x: 360, y: 7042, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor', stuckLocal: { x: 0, y: -58 }, stuckTime: 0 }
+    this.axe = { state: 'ready', x: 142.5, y: 8440, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor', stuckLocal: { x: 0, y: -45 }, stuckTime: 0 }
     this.cameraY = clamp(AXEBOUND_FLOOR_Y - this.viewWorldHeight * .86, 0, AXEBOUND_WORLD_HEIGHT - this.viewWorldHeight); this.highestY = AXEBOUND_FLOOR_Y; this.aimStart = null; this.aimCurrent = null; this.falls = 0; this.throws = 0; this.fallArmed = true; this.shake = 0; this.autoClock = 0; this.clear = false; this.clearTimer = 0; this.fallingObjects.clear(); this.particles = []
   }
   destroy() { this.paused = true; this.particles = [] }
