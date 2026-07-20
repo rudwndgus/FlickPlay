@@ -870,7 +870,7 @@ class LoopHoopsController extends BaseController {
     this.options.onImpact('tap')
   }
   private drawTimer(ctx: CanvasRenderingContext2D) {
-    const x = 58, y = 98, width = this.w - 116, height = 25
+    const x = 58, y = 10, width = this.w - 116, height = 25
     ctx.fillStyle = 'rgba(13,13,14,.72)'; ctx.fillRect(x, y, width, height)
     const color = this.timeLeft > .28 ? '#18e9ed' : '#ff3f63'
     ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = this.timeLeft < .3 ? 16 : 8; ctx.fillRect(x, y, width * this.timeLeft, height); ctx.shadowBlur = 0
@@ -1240,10 +1240,10 @@ class PerfectStackController extends BaseController {
     for (const spark of this.sparks) { ctx.globalAlpha = clamp(spark.life * 2, 0, 1); ctx.fillStyle = spark.color; ctx.fillRect(spark.x - spark.size / 2, spark.y + camera - spark.size / 2, spark.size, spark.size) } ctx.globalAlpha = 1
     if (this.placementPulse > 0) { const placed = this.blocks[this.blocks.length - 1], y = placed.y + camera + 20; ctx.globalAlpha = this.placementPulse * .55; ctx.strokeStyle = '#fff4b1'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(placed.x + placed.width / 2, y, placed.width * (.5 + (1 - this.placementPulse) * .2), 19 + (1 - this.placementPulse) * 14, 0, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1 }
     if (this.perfectPulse > 0) { const glow = ctx.createRadialGradient(this.w / 2, this.h * .45, 0, this.w / 2, this.h * .45, this.w * .7); glow.addColorStop(0, `rgba(255,235,144,${this.perfectPulse * .18})`); glow.addColorStop(1, 'rgba(255,133,216,0)'); ctx.fillStyle = glow; ctx.fillRect(0, 0, this.w, this.h) }
-    ctx.fillStyle = 'rgba(12,10,38,.62)'; ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; roundedRect(ctx, 18, 58, this.w - 36, 68, 18); ctx.fill(); ctx.stroke()
-    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(231,229,255,.66)'; ctx.font = '800 9px system-ui'; ctx.fillText('FLOOR', 34, 79); ctx.fillStyle = '#fff'; ctx.font = '900 27px system-ui'; ctx.fillText(String(this.score), 33, 109)
-    ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(231,229,255,.66)'; ctx.font = '800 9px system-ui'; ctx.fillText('BLOCK WIDTH', this.w - 34, 79); ctx.fillStyle = '#ffe486'; ctx.font = '900 20px system-ui'; ctx.fillText(`${Math.max(1, Math.round(this.current.width / 220 * 100))}%`, this.w - 33, 106)
-    if (this.feedbackLife > 0) { const alpha = Math.min(1, this.feedbackLife * 2.6), pulse = 1 + Math.sin((1.2 - this.feedbackLife) * 10) * .03; ctx.save(); ctx.globalAlpha = alpha; ctx.translate(this.w / 2, 158); ctx.scale(pulse, pulse); ctx.textAlign = 'center'; ctx.fillStyle = this.perfect > 0 ? '#fff1a0' : '#dfe3ff'; ctx.shadowColor = this.perfect > 0 ? '#ffb85c' : '#879bff'; ctx.shadowBlur = this.perfect > 0 ? 20 : 10; ctx.font = this.perfect > 0 ? '950 25px system-ui' : '850 13px system-ui'; ctx.fillText(this.feedback, 0, 0); ctx.restore() }
+    ctx.fillStyle = 'rgba(12,10,38,.62)'; ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; roundedRect(ctx, 18, 10, this.w - 36, 68, 18); ctx.fill(); ctx.stroke()
+    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(231,229,255,.66)'; ctx.font = '800 9px system-ui'; ctx.fillText('FLOOR', 34, 31); ctx.fillStyle = '#fff'; ctx.font = '900 27px system-ui'; ctx.fillText(String(this.score), 33, 61)
+    ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(231,229,255,.66)'; ctx.font = '800 9px system-ui'; ctx.fillText('BLOCK WIDTH', this.w - 34, 31); ctx.fillStyle = '#ffe486'; ctx.font = '900 20px system-ui'; ctx.fillText(`${Math.max(1, Math.round(this.current.width / 220 * 100))}%`, this.w - 33, 58)
+    if (this.feedbackLife > 0) { const alpha = Math.min(1, this.feedbackLife * 2.6), pulse = 1 + Math.sin((1.2 - this.feedbackLife) * 10) * .03; ctx.save(); ctx.globalAlpha = alpha; ctx.translate(this.w / 2, 105); ctx.scale(pulse, pulse); ctx.textAlign = 'center'; ctx.fillStyle = this.perfect > 0 ? '#fff1a0' : '#dfe3ff'; ctx.shadowColor = this.perfect > 0 ? '#ffb85c' : '#879bff'; ctx.shadowBlur = this.perfect > 0 ? 20 : 10; ctx.font = this.perfect > 0 ? '950 25px system-ui' : '850 13px system-ui'; ctx.fillText(this.feedback, 0, 0); ctx.restore() }
     drawGameLabel(ctx, 'TAP TO DROP', `${this.score} floors`, this.w, this.h, 32)
   }
 }
