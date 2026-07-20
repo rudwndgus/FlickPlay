@@ -1,8 +1,8 @@
-export const APP_VERSION = '0.4.6'
+export const APP_VERSION = '0.4.7'
 
 export const UPDATE_INFO = {
-  title: 'Loop Hoops 득점 연출이 새로워졌어요',
-  description: '득점 반응을 골대 주변의 자연스러운 잔광과 점수 팝업으로 다듬고, 클린샷 3연속부터 공에 이동 방향을 따라 흐르는 불꽃을 더했습니다.',
+  title: 'Loop Hoops 득점 판정이 정확해졌어요',
+  description: '림 안쪽 가장자리를 스치며 통과한 공도 놓치지 않고 득점합니다. 중앙 통과는 클린샷, 가장자리 통과는 일반 득점으로 정확하게 구분합니다.',
   addedGames: ['hoop-flight', 'dunk-climb', 'loop-hoops', 'crossing-rush', 'neon-escape', 'perfect-stack', 'pin-core', 'pocket-golf'],
-  changes: ['골대 중심의 짧고 자연스러운 득점 이펙트', '클린샷 3연속 FIRE 모드', '공의 속도와 방향에 반응하는 화염 꼬리'],
+  changes: ['림 안쪽 통과 판정 보강', '가장자리 득점과 클린샷 구분', '백보드–림 바깥 틈의 오득점 차단 유지'],
 } as const

@@ -16,6 +16,7 @@ type LoopController = GameController & {
   scoreEffect: { x: number; y: number; life: number; label: string; points: number; clean: boolean; streak: number }
   getHoopConnectorGeometry: () => { start: { x: number; y: number }; end: { x: number; y: number }; radius: number }
   getHoopConnectorGeometries: () => Array<{ start: { x: number; y: number }; end: { x: number; y: number }; radius: number }>
+  getGoalCrossing: (previous: { x: number; y: number }) => { grazedRim: boolean } | null
   wrappedRenderOffsets: (x: number, radius: number) => number[]
 }
 
@@ -223,6 +224,31 @@ describe('Loop Hoops physics', () => {
     expect(controller.getScore()).toBe(0)
     expect(controller.target.side).toBe(previousSide)
     expect(onScore).not.toHaveBeenCalled()
+  })
+
+  it('counts a visible inside-edge basket without calling it a clean shot', () => {
+    const { controller, onScore } = makeController()
+    const previousSide = controller.target.side
+    controller.ball.x = controller.target.x + 16
+    controller.ball.y = controller.target.y - 8
+    controller.ball.vx = 0; controller.ball.vy = 500
+    controller.rimHits = 0; controller.touchedSurface = false
+
+    controller.update(.03)
+
+    expect(controller.getScore()).toBe(1)
+    expect(controller.target.side).toBe(-previousSide)
+    expect(controller.scoreEffect).toMatchObject({ clean: false, points: 1, label: 'SCORE!  +1' })
+    expect(onScore).toHaveBeenCalledWith(1)
+  })
+
+  it('keeps the forgiving goal sensor inside the visible rim', () => {
+    const { controller } = makeController()
+    controller.ball.x = controller.target.x + 18
+    controller.ball.y = controller.target.y + 1
+    controller.ball.vx = 0; controller.ball.vy = 500
+
+    expect(controller.getGoalCrossing({ x: controller.ball.x, y: controller.target.y - 1 })).toBeNull()
   })
 
   it('physically blocks the backboard-to-rim seam even during collision cooldown', () => {

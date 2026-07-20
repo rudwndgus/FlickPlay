@@ -7,6 +7,7 @@ const MAX_CLEAN_COMBO = 5
 const MAX_PHYSICS_STEP = 1 / 120
 const LOOP_RIM_HALF = 36
 const LOOP_RIM_TUBE_RADIUS = 4
+const LOOP_SCORE_FORGIVENESS = 3
 const LOOP_WRAP_TRAVEL_SPEED_LIMIT = 280
 export const PIN_CORE_FLIGHT_SECONDS = .085
 const PIN_CORE_MAX_RADIUS = 92
@@ -657,11 +658,21 @@ class LoopHoopsController extends BaseController {
 
     const emergingPastBoundaryHardware = this.wrapGraceSide === this.target.side
     const approachingBoundaryConnector = this.wrapApproachSide === this.target.side
+    const goalCrossing = !wrapped ? this.getGoalCrossing(previous) : null
+    if (goalCrossing) {
+      if (goalCrossing.grazedRim) { this.rimHits = Math.max(1, this.rimHits); this.touchedSurface = true }
+      this.scoreGoal()
+      return
+    }
+    const descendingThroughOpening = this.isDescendingThroughRimOpening()
+    if (descendingThroughOpening && this.isInForgivingRimMargin()) {
+      this.rimHits = Math.max(1, this.rimHits)
+      this.touchedSurface = true
+    }
     const hitObstacle = !wrapped && (this.collideWithRimUnderside(previous)
       || (!emergingPastBoundaryHardware && !approachingBoundaryConnector && this.collideWithHoopConnector())
       || (!emergingPastBoundaryHardware && this.collideWithBackboard(previous))
-      || this.collideWithRim(previous))
-    if (!wrapped && !hitObstacle && this.crossedInsideRim(previous)) this.scoreGoal()
+      || (!descendingThroughOpening && this.collideWithRim(previous)))
     if (hitObstacle) this.limitLoopBallSpeed()
   }
   render(ctx: CanvasRenderingContext2D) {
@@ -698,14 +709,29 @@ class LoopHoopsController extends BaseController {
     this.ball.vx = this.target.side * Math.min(245, 178 + this.score * 2.5)
     this.rimHits = 0; this.touchedSurface = false
   }
-  private crossedInsideRim(previous: Point) {
-    if (this.ball.vy <= 0 || previous.y > this.target.y || this.ball.y <= this.target.y) return false
+  private rimOpeningHalf(forgiving = false) {
+    return LOOP_RIM_HALF - this.ball.r - LOOP_RIM_TUBE_RADIUS + (forgiving ? LOOP_SCORE_FORGIVENESS : 0)
+  }
+  private isDescendingThroughRimOpening() {
+    const verticalReach = this.ball.r + LOOP_RIM_TUBE_RADIUS
+    return this.ball.vy > 0
+      && Math.abs(this.ball.x - this.target.x) <= this.rimOpeningHalf(true)
+      && this.ball.y >= this.target.y - verticalReach
+      && this.ball.y <= this.target.y + verticalReach
+  }
+  private isInForgivingRimMargin() {
+    return Math.abs(this.ball.x - this.target.x) > this.rimOpeningHalf()
+  }
+  private getGoalCrossing(previous: Point) {
+    if (this.ball.vy <= 0 || previous.y > this.target.y || this.ball.y <= this.target.y) return null
     const travelY = this.ball.y - previous.y
-    if (travelY <= 0) return false
+    if (travelY <= 0) return null
     const crossingTime = clamp((this.target.y - previous.y) / travelY, 0, 1)
     const crossingX = previous.x + (this.ball.x - previous.x) * crossingTime
-    const openingHalf = LOOP_RIM_HALF - this.ball.r - LOOP_RIM_TUBE_RADIUS
-    return openingHalf > 0 && Math.abs(crossingX - this.target.x) <= openingHalf
+    const strictOpeningHalf = this.rimOpeningHalf(), forgivingOpeningHalf = this.rimOpeningHalf(true)
+    const distanceFromCenter = Math.abs(crossingX - this.target.x)
+    if (forgivingOpeningHalf <= 0 || distanceFromCenter > forgivingOpeningHalf) return null
+    return { grazedRim: distanceFromCenter > strictOpeningHalf }
   }
   private collideWithBackboard(previous: Point) {
     const size = this.sideHoopSize()
