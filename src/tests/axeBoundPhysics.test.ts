@@ -12,14 +12,22 @@ const makeController = () => {
 }
 
 describe('AXEBOUND physics', () => {
-  it('launches the axe in the direct drag direction with proportional power', () => {
+  it('aims from anywhere and launches opposite the pull like a slingshot', () => {
     const { controller } = makeController()
-    controller.pointerDown(80, 500); controller.pointerMove(200, 380); controller.pointerUp(200, 380)
+    controller.pointerDown(34, 210); controller.pointerMove(154, 330); controller.pointerUp(154, 330)
 
     expect(controller.axe.state).toBe('flying')
-    expect(controller.axe.vx).toBeGreaterThan(0)
+    expect(controller.axe.vx).toBeLessThan(0)
     expect(controller.axe.vy).toBeLessThan(0)
     expect(controller.throws).toBe(1)
+  })
+
+  it('fires upward when the player pulls straight down', () => {
+    const { controller } = makeController()
+    controller.pointerDown(350, 140); controller.pointerUp(350, 260)
+
+    expect(controller.axe.vx).toBeCloseTo(0, 5)
+    expect(controller.axe.vy).toBeLessThan(-400)
   })
 
   it('cancels a very short drag without releasing a held axe', () => {

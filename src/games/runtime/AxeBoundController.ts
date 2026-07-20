@@ -222,10 +222,10 @@ export class AxeBoundController implements GameController {
   pointerUp(x: number, y: number) {
     if (!this.aimStart) return
     this.aimCurrent = { x, y }
-    const drag = { x: x - this.aimStart.x, y: y - this.aimStart.y }, dragLength = length(drag)
+    const pull = { x: this.aimStart.x - x, y: this.aimStart.y - y }, dragLength = length(pull)
     this.aimStart = null; this.aimCurrent = null
     if (dragLength < MIN_DRAG) return
-    this.throwAxe(normalize(drag), clamp(dragLength / MAX_DRAG, 0, 1))
+    this.throwAxe(normalize(pull), clamp(dragLength / MAX_DRAG, 0, 1))
   }
   swipe(dx: number, dy: number) { if (length({ x: dx, y: dy }) >= MIN_DRAG) this.throwAxe(normalize({ x: dx, y: dy }), clamp(length({ x: dx, y: dy }) / 160, 0, 1)) }
 
@@ -457,8 +457,9 @@ export class AxeBoundController implements GameController {
     if (!this.aimStart || !this.aimCurrent) return
     const drag = { x: this.aimCurrent.x - this.aimStart.x, y: this.aimCurrent.y - this.aimStart.y }, dragLength = length(drag)
     if (dragLength < 2) return
-    const direction = normalize(drag), power = clamp(dragLength / MAX_DRAG, 0, 1), speed = MIN_THROW_SPEED + (MAX_THROW_SPEED - MIN_THROW_SPEED) * power
-    ctx.save(); ctx.strokeStyle = '#ffcc45'; ctx.lineWidth = 3; ctx.shadowColor = '#ff3f9f'; ctx.shadowBlur = 10; ctx.beginPath(); ctx.moveTo(this.aimStart.x, this.aimStart.y); ctx.lineTo(this.aimStart.x + direction.x * Math.min(MAX_DRAG, dragLength), this.aimStart.y + direction.y * Math.min(MAX_DRAG, dragLength)); ctx.stroke(); ctx.shadowBlur = 0
+    const direction = normalize({ x: -drag.x, y: -drag.y }), power = clamp(dragLength / MAX_DRAG, 0, 1), speed = MIN_THROW_SPEED + (MAX_THROW_SPEED - MIN_THROW_SPEED) * power
+    const cappedDrag = Math.min(MAX_DRAG, dragLength), dragDirection = normalize(drag)
+    ctx.save(); ctx.strokeStyle = '#ffcc45'; ctx.lineWidth = 3; ctx.shadowColor = '#ff3f9f'; ctx.shadowBlur = 10; ctx.beginPath(); ctx.moveTo(this.aimStart.x, this.aimStart.y); ctx.lineTo(this.aimStart.x + dragDirection.x * cappedDrag, this.aimStart.y + dragDirection.y * cappedDrag); ctx.stroke(); ctx.shadowBlur = 0
     const player = this.worldToScreen(this.player)
     for (let index = 1; index <= 7; index++) {
       const time = index * .075, world = { x: this.player.x + direction.x * speed * time, y: this.player.y + direction.y * speed * time + 380 * time * time }
@@ -472,7 +473,7 @@ export class AxeBoundController implements GameController {
     ctx.save(); ctx.fillStyle = 'rgba(5,3,12,.82)'; ctx.strokeStyle = 'rgba(255,64,157,.28)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(12, 10, this.w - 24, 55, 14); ctx.fill(); ctx.stroke()
     ctx.textAlign = 'left'; ctx.fillStyle = '#ff5bae'; ctx.font = '900 8px ui-monospace, monospace'; ctx.fillText(zone.name, 26, 27); ctx.fillStyle = '#fff'; ctx.font = '900 16px ui-monospace, monospace'; ctx.fillText(`HEIGHT ${currentHeight}m`, 26, 49)
     ctx.textAlign = 'right'; ctx.fillStyle = '#9c86ae'; ctx.font = '800 8px ui-monospace, monospace'; ctx.fillText('SESSION BEST', this.w - 26, 27); ctx.fillStyle = '#ffe066'; ctx.font = '900 16px ui-monospace, monospace'; ctx.fillText(`${this.score}m`, this.w - 26, 49)
-    ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.58)'; ctx.font = '800 9px system-ui'; ctx.fillText(`DRAG TO THROW  •  FALLS ${this.falls}  •  THROWS ${this.throws}`, this.w / 2, this.h - 18); ctx.restore()
+    ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.58)'; ctx.font = '800 9px system-ui'; ctx.fillText(`PULL BACK & RELEASE  •  FALLS ${this.falls}  •  THROWS ${this.throws}`, this.w / 2, this.h - 18); ctx.restore()
   }
 
   private drawClearOverlay(ctx: CanvasRenderingContext2D) {
