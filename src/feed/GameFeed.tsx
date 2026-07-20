@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { MiniGameModule } from '../games/types'
 import { GameFeedItem } from './GameFeedItem'
+import { getVisibleFeedIndex } from './feedIndex'
 
 interface Props {
   games: readonly MiniGameModule[]
@@ -21,7 +22,8 @@ interface Props {
 
 export function GameFeed(props: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const settled = useRef<number | undefined>(undefined)
+  const scrollFrame = useRef<number | undefined>(undefined)
+  const visibleIndex = useRef(props.currentIndex)
   const restored = useRef(false)
 
   useEffect(() => {
@@ -29,12 +31,18 @@ export function GameFeed(props: Props) {
     restored.current = true; requestAnimationFrame(() => node.scrollTo({ top: props.currentIndex * node.clientHeight }))
   }, [props.currentIndex, props.ready])
 
+  useEffect(() => { visibleIndex.current = props.currentIndex }, [props.currentIndex])
+  useEffect(() => () => { if (scrollFrame.current !== undefined) window.cancelAnimationFrame(scrollFrame.current) }, [])
+
   const onScroll = () => {
-    if (settled.current) window.clearTimeout(settled.current)
-    settled.current = window.setTimeout(() => {
+    if (scrollFrame.current !== undefined) return
+    scrollFrame.current = window.requestAnimationFrame(() => {
+      scrollFrame.current = undefined
       const node = containerRef.current; if (!node) return
-      props.onIndexChange(Math.max(0, Math.min(props.games.length - 1, Math.round(node.scrollTop / node.clientHeight))))
-    }, 70)
+      const index = getVisibleFeedIndex(node.scrollTop, node.clientHeight, props.games.length)
+      if (index === visibleIndex.current) return
+      visibleIndex.current = index; props.onIndexChange(index)
+    })
   }
 
   return (

@@ -49,6 +49,20 @@ describe('Pocket Golf', () => {
     expect(onScore).toHaveBeenLastCalledWith(1)
   })
 
+  it('aims with the same pull vector from anywhere on the course', () => {
+    const { controller } = makeController()
+    const initial = { x: controller.ball.x, y: controller.ball.y }
+    controller.pointerDown(34, 210)
+    controller.pointerMove(94, 270)
+    controller.pointerUp(94, 270)
+
+    expect(controller.ball).toMatchObject({ x: initial.x, y: initial.y })
+    expect(controller.ball.vx).toBeLessThan(0)
+    expect(controller.ball.vy).toBeLessThan(0)
+    expect(Math.hypot(controller.ball.vx, controller.ball.vy)).toBeCloseTo(Math.hypot(60, 60) * 4.2, 5)
+    expect(controller.totalStrokes).toBe(1)
+  })
+
   it('uses visible wall bounds for a predictable bank shot', () => {
     const { controller } = makeController()
     const wall = controller.walls[0]

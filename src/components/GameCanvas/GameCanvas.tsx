@@ -25,20 +25,25 @@ export function GameCanvas({ game, preview = false, active = true, paused = fals
       preview,
       onScore: (score) => callbacks.current.onScore?.(score),
       onFinish: (score) => callbacks.current.onFinish?.(score),
-      onImpact: (kind) => audioManager.play(kind),
+      onImpact: preview ? () => {} : (kind) => audioManager.play(kind),
     })
     controllerRef.current = controller
-    let frame = 0, last = performance.now(), cssWidth = 0, cssHeight = 0, initialized = false
+    let frame = 0, last = performance.now(), lastPaint = 0, cssWidth = 0, cssHeight = 0, initialized = false
+    const render = () => { const dpr = canvas.width / Math.max(1, cssWidth); context.setTransform(dpr, 0, 0, dpr, 0, 0); controller.render(context) }
     const resize = () => {
-      const rect = canvas.getBoundingClientRect(), dprLimit = game.id === 'perfect-stack' ? 1.5 : 2, dpr = Math.min(dprLimit, window.devicePixelRatio || 1)
-      cssWidth = rect.width; cssHeight = rect.height; canvas.width = Math.round(cssWidth * dpr); canvas.height = Math.round(cssHeight * dpr); controller.resize(cssWidth, cssHeight, dpr)
+      const rect = canvas.getBoundingClientRect(), dprLimit = preview ? 1 : game.id === 'perfect-stack' ? 1.5 : 2, dpr = Math.min(dprLimit, window.devicePixelRatio || 1)
+      const nextWidth = rect.width, nextHeight = rect.height, pixelWidth = Math.round(nextWidth * dpr), pixelHeight = Math.round(nextHeight * dpr)
+      if (initialized && nextWidth === cssWidth && nextHeight === cssHeight && canvas.width === pixelWidth && canvas.height === pixelHeight) return
+      cssWidth = nextWidth; cssHeight = nextHeight; canvas.width = pixelWidth; canvas.height = pixelHeight; controller.resize(cssWidth, cssHeight, dpr)
       if (!initialized && cssWidth > 0 && cssHeight > 0) { initialized = true; controller.restart() }
+      if (initialized) render()
     }
     const observer = new ResizeObserver(resize); observer.observe(canvas); resize()
     const loop = (time: number) => {
-      const dt = Math.min(.05, (time - last) / 1000); last = time; controller.update(dt)
-      const dpr = canvas.width / Math.max(1, cssWidth); context.setTransform(dpr, 0, 0, dpr, 0, 0); controller.render(context)
       frame = requestAnimationFrame(loop)
+      if (pausedRef.current || document.hidden || !initialized) { last = time; return }
+      if (preview && time - lastPaint < 1000 / 30) return
+      const dt = Math.min(.05, (time - last) / 1000); last = time; lastPaint = time; controller.update(dt); render()
     }
     const point = (event: PointerEvent) => { const rect = canvas.getBoundingClientRect(); return { x: event.clientX - rect.left, y: event.clientY - rect.top } }
     let down: { x: number; y: number } | null = null
@@ -52,11 +57,12 @@ export function GameCanvas({ game, preview = false, active = true, paused = fals
       if (direction) { event.preventDefault(); controller.swipe?.(...direction) }
       if (event.key === 'r' || event.key === 'R') controller.restart()
     }
-    canvas.addEventListener('pointerdown', handleDown); canvas.addEventListener('pointermove', handleMove); canvas.addEventListener('pointerup', handleUp); canvas.addEventListener('pointercancel', handleUp)
-    window.addEventListener('keydown', handleKeyDown)
+    if (!preview) {
+      canvas.addEventListener('pointerdown', handleDown); canvas.addEventListener('pointermove', handleMove); canvas.addEventListener('pointerup', handleUp); canvas.addEventListener('pointercancel', handleUp)
+      window.addEventListener('keydown', handleKeyDown)
+    }
     frame = requestAnimationFrame(loop)
-    const visibility = () => document.hidden || pausedRef.current ? controller.pause() : controller.resume(); document.addEventListener('visibilitychange', visibility)
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); document.removeEventListener('visibilitychange', visibility); window.removeEventListener('keydown', handleKeyDown); canvas.removeEventListener('pointerdown', handleDown); canvas.removeEventListener('pointermove', handleMove); canvas.removeEventListener('pointerup', handleUp); canvas.removeEventListener('pointercancel', handleUp); controller.destroy(); controllerRef.current = null }
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); if (!preview) { window.removeEventListener('keydown', handleKeyDown); canvas.removeEventListener('pointerdown', handleDown); canvas.removeEventListener('pointermove', handleMove); canvas.removeEventListener('pointerup', handleUp); canvas.removeEventListener('pointercancel', handleUp) } controller.destroy(); controllerRef.current = null }
   }, [active, game, preview])
 
   useEffect(() => { pausedRef.current = paused; if (!active) return; if (paused) controllerRef.current?.pause(); else controllerRef.current?.resume() }, [active, paused])

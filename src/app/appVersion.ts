@@ -1,8 +1,8 @@
-export const APP_VERSION = '0.5.0'
+export const APP_VERSION = '0.5.1'
 
 export const UPDATE_INFO = {
-  title: 'Pocket Golf 5홀 코스가 열렸어요',
-  description: '서로 다른 5개 코스에서 벽 반사와 범퍼를 활용하고 모래와 물을 피해 총 타수를 줄이세요. 이제 가장 낮은 타수가 최고 기록으로 저장됩니다.',
+  title: '더 빠른 게임 피드와 자유로운 골프 조준',
+  description: 'Pocket Golf는 화면 어디서든 당겨 조준할 수 있고, 게임 피드는 다음 미리보기를 미리 준비해 넘기는 순간 바로 재생합니다.',
   addedGames: ['hoop-flight', 'dunk-climb', 'loop-hoops', 'crossing-rush', 'neon-escape', 'perfect-stack', 'pin-core', 'pocket-golf'],
-  changes: ['난도가 상승하는 5개 미니골프 스테이지', '벽·범퍼·모래·물 장애물과 벌타', '낮은 총 타수를 최고 기록으로 저장'],
+  changes: ['화면 전체에서 시작하는 골프 드래그', '인접 게임 미리보기 선로딩', '미리보기 메모리·렌더링 비용 절감'],
 } as const

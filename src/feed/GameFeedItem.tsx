@@ -11,7 +11,7 @@ interface Props {
 export function GameFeedItem({ game, index, total, active, current, liked, bookmarked, muted, bestScore, onPlay, onInfo, onLike, onBookmark, onShare, onToggleMute }: Props) {
   return (
     <article className={`feed-item ${current ? 'is-current' : ''}`} style={{ background: game.theme.background }} aria-label={`${game.title} 미리보기`}>
-      {active ? <GameCanvas game={game} preview active={current} /> : <div className="preview-placeholder" style={{ background: `linear-gradient(150deg, ${game.theme.background}, ${game.theme.surface})` }} />}
+      {active ? <GameCanvas game={game} preview paused={!current} /> : <div className="preview-placeholder" style={{ background: `linear-gradient(150deg, ${game.theme.background}, ${game.theme.surface})` }} />}
       <div className="feed-vignette" />
       <header className="feed-topbar">
         <button className="brand" aria-label="플릭코 홈"><span className="brand-bolt">F</span><span>Flicko</span></button>

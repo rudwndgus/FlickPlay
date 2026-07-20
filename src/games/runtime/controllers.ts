@@ -1436,7 +1436,7 @@ class PocketGolfController extends BaseController {
   }
 
   pointerDown(x: number, y: number) {
-    if (this.status !== 'playing' || this.completeTimer > 0 || Math.hypot(this.ball.vx, this.ball.vy) >= 7 || distance({ x, y }, this.ball) > 48) return
+    if (this.status !== 'playing' || this.completeTimer > 0 || Math.hypot(this.ball.vx, this.ball.vy) >= 7) return
     this.dragStart = { x, y }; this.dragPoint = { x, y }
   }
   pointerMove(x: number, y: number) { if (this.dragStart) this.dragPoint = { x, y } }
@@ -1573,7 +1573,9 @@ class PocketGolfController extends BaseController {
     const pullX = this.dragStart.x - this.dragPoint.x, pullY = this.dragStart.y - this.dragPoint.y, pullDistance = Math.hypot(pullX, pullY)
     if (pullDistance < 1) return
     const power = Math.min(140, pullDistance), nx = pullX / pullDistance, ny = pullY / pullDistance
-    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(this.ball.x, this.ball.y); ctx.lineTo(this.dragPoint.x, this.dragPoint.y); ctx.stroke()
+    ctx.strokeStyle = 'rgba(255,255,255,.46)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(this.dragStart.x, this.dragStart.y); ctx.lineTo(this.dragPoint.x, this.dragPoint.y); ctx.stroke()
+    ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.beginPath(); ctx.arc(this.dragStart.x, this.dragStart.y, 13, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.stroke()
+    ctx.fillStyle = 'rgba(247,223,115,.82)'; ctx.beginPath(); ctx.arc(this.dragPoint.x, this.dragPoint.y, 8, 0, Math.PI * 2); ctx.fill()
     for (let dot = 1; dot <= 9; dot++) { const distance = 17 + dot * (8 + power * .045); ctx.globalAlpha = .25 + dot * .06; ctx.fillStyle = '#fff5a2'; ctx.beginPath(); ctx.arc(this.ball.x + nx * distance, this.ball.y + ny * distance, Math.max(1.4, 3.5 - dot * .18), 0, Math.PI * 2); ctx.fill() } ctx.globalAlpha = 1
     ctx.fillStyle = 'rgba(8,32,24,.66)'; roundedRect(ctx, this.w * .18, this.h - 65, this.w * .64, 12, 6); ctx.fill()
     const powerGradient = ctx.createLinearGradient(this.w * .18, 0, this.w * .82, 0); powerGradient.addColorStop(0, '#f7e77f'); powerGradient.addColorStop(.7, '#ffad57'); powerGradient.addColorStop(1, '#ff5b52'); ctx.fillStyle = powerGradient; roundedRect(ctx, this.w * .18, this.h - 65, this.w * .64 * power / 140, 12, 6); ctx.fill()
@@ -1585,7 +1587,7 @@ class PocketGolfController extends BaseController {
     ctx.textAlign = 'right'; ctx.fillStyle = '#a9c8b4'; ctx.font = '800 8px system-ui'; ctx.fillText('TOTAL', this.w - 29, 26); ctx.fillStyle = '#fff'; ctx.font = '900 18px system-ui'; ctx.fillText(`${this.totalStrokes}타`, this.w - 29, 47)
     ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.72)'; ctx.font = '800 10px system-ui'; ctx.fillText(`현재 홀  ${this.stageStrokes}타`, this.w * .5, this.h - 17)
     if (this.feedbackLife > 0) { const alpha = Math.min(1, this.feedbackLife * 2), scale = 1 + Math.sin(Math.min(1, (1.4 - this.feedbackLife) * 2) * Math.PI) * .06; ctx.save(); ctx.translate(this.w * .5, 94); ctx.scale(scale, scale); ctx.globalAlpha = alpha; ctx.fillStyle = '#fffbe4'; ctx.shadowColor = '#f7df73'; ctx.shadowBlur = 14; ctx.font = '950 18px system-ui'; ctx.fillText(this.feedback, 0, 0); ctx.restore() }
-    if (!this.dragStart && Math.hypot(this.ball.vx, this.ball.vy) < 7 && this.completeTimer <= 0) { ctx.fillStyle = 'rgba(255,255,255,.72)'; ctx.font = '800 9px system-ui'; ctx.fillText('공을 잡고 뒤로 당겨 샷', this.w * .5, this.h - 49) }
+    if (!this.dragStart && Math.hypot(this.ball.vx, this.ball.vy) < 7 && this.completeTimer <= 0) { ctx.fillStyle = 'rgba(255,255,255,.72)'; ctx.font = '800 9px system-ui'; ctx.fillText('화면 어디서든 뒤로 당겨 샷', this.w * .5, this.h - 49) }
   }
 }
 
