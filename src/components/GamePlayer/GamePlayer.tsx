@@ -29,7 +29,6 @@ export function GamePlayer({ game, bestScore, muted, onBack, onToggleMute, onFin
       <header className="game-header">
         <button onClick={onBack} className="header-button" aria-label="피드로 돌아가기"><ArrowLeft size={23} /></button>
         <div className="header-game"><span style={{ background: game.theme.accent, color: game.theme.surface }}>{game.icon}</span><div><small>NOW PLAYING</small><strong>{game.title}</strong></div></div>
-        <div className="header-score"><small>SCORE</small><strong>{score}</strong></div>
         <button onClick={() => setPaused((value) => !value)} className="header-button" aria-label={paused ? '계속하기' : '일시정지'}>{paused ? <Play size={21} /> : <Pause size={21} />}</button>
         <button onClick={onToggleMute} className="header-button hide-small" aria-label={muted ? '소리 켜기' : '소리 끄기'}>{muted ? <VolumeX size={20} /> : <Volume2 size={20} />}</button>
       </header>
