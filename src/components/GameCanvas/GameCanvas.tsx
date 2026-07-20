@@ -28,7 +28,7 @@ export function GameCanvas({ game, preview = false, active = true, paused = fals
       onImpact: preview ? () => {} : (kind) => audioManager.play(kind),
     })
     controllerRef.current = controller
-    let frame = 0, last = performance.now(), lastPaint = 0, cssWidth = 0, cssHeight = 0, initialized = false
+    let frame = 0, last = performance.now(), cssWidth = 0, cssHeight = 0, initialized = false
     const render = () => { const dpr = canvas.width / Math.max(1, cssWidth); context.setTransform(dpr, 0, 0, dpr, 0, 0); controller.render(context) }
     const resize = () => {
       const rect = canvas.getBoundingClientRect(), dprLimit = preview ? 1 : game.id === 'perfect-stack' ? 1.5 : 2, dpr = Math.min(dprLimit, window.devicePixelRatio || 1)
@@ -42,8 +42,7 @@ export function GameCanvas({ game, preview = false, active = true, paused = fals
     const loop = (time: number) => {
       frame = requestAnimationFrame(loop)
       if (pausedRef.current || document.hidden || !initialized) { last = time; return }
-      if (preview && time - lastPaint < 1000 / 30) return
-      const dt = Math.min(.05, (time - last) / 1000); last = time; lastPaint = time; controller.update(dt); render()
+      const dt = Math.min(.05, (time - last) / 1000); last = time; controller.update(dt); render()
     }
     const point = (event: PointerEvent) => { const rect = canvas.getBoundingClientRect(); return { x: event.clientX - rect.left, y: event.clientY - rect.top } }
     let down: { x: number; y: number } | null = null
