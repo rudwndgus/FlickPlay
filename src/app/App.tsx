@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { GameFeed } from '../feed/GameFeed'
+import { shuffleGames } from '../feed/shuffleGames'
 import { gameRegistry } from '../games/registry'
 import type { GameStats, MiniGameModule } from '../games/types'
 import { selectBestGameScore } from '../games/scoring'
@@ -23,6 +24,7 @@ export function App() {
   const [activeGame, setActiveGame] = useState<MiniGameModule | null>(null)
   const [infoGame, setInfoGame] = useState<MiniGameModule | null>(null)
   const [authReason, setAuthReason] = useState<string | null>(null)
+  const randomizedGames = useMemo(() => shuffleGames(gameRegistry), [])
 
   useEffect(() => { void loadState().then((loaded) => { setState(loaded); audioManager.setMuted(loaded.muted); setReady(true) }) }, [])
   useEffect(() => { if (ready) void saveState(state) }, [ready, state])
@@ -71,7 +73,7 @@ export function App() {
     <div className={`app-shell tab-${activeTab} ${activeGame ? 'game-is-open' : ''}`} data-ready={ready}>
       {activeTab === 'home' && <HomeScreen onPlay={openGame} onExplore={() => changeTab('explore')} onRequireAuth={setAuthReason} onShare={(game) => void share(game)} />}
       {activeTab === 'explore' && <GameFeed
-          games={gameRegistry} ready={ready} currentIndex={state.feedIndex} liked={liked} bookmarked={bookmarked} muted={state.muted} bestScores={bestScores}
+          games={randomizedGames} ready={ready} currentIndex={state.feedIndex} liked={liked} bookmarked={bookmarked} muted={state.muted} bestScores={bestScores}
           onIndexChange={(feedIndex) => setState((current) => ({ ...current, feedIndex }))}
           onPlay={openGame} onInfo={setInfoGame} onLike={() => setAuthReason('좋아요')} onBookmark={() => setAuthReason('게임 저장')} onShare={(game) => void share(game)} onToggleMute={toggleMute}
         />}

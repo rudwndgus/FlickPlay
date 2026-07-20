@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.5.1'
+export const APP_VERSION = '0.5.2'
 
 export const UPDATE_INFO = {
   title: '더 빠른 게임 피드와 자유로운 골프 조준',
