@@ -674,6 +674,7 @@ class LoopHoopsController extends BaseController {
     this.drawBallTrail(ctx)
     for (const offset of this.wrappedRenderOffsets(this.ball.x, this.ball.r)) {
       ctx.fillStyle = 'rgba(20,10,6,.34)'; ctx.beginPath(); ctx.ellipse(this.ball.x + offset, this.h - 70, 22 + Math.abs(this.ball.y - (this.h - 70)) * .015, 7, 0, 0, Math.PI * 2); ctx.fill()
+      if (this.cleanStreak >= FIRE_STREAK) this.drawFireWake(ctx, this.ball.x + offset, this.ball.y)
       ctx.save(); ctx.translate(this.ball.x + offset, this.ball.y); ctx.scale(1 + this.ball.kick * .16, 1 - this.ball.kick * .1); drawBasketball(ctx, 0, 0, this.ball.r, this.ball.rotation, this.cleanStreak >= FIRE_STREAK); ctx.restore()
     }
     this.drawSideHoopImage(ctx, true)
@@ -905,12 +906,30 @@ class LoopHoopsController extends BaseController {
   private drawBallTrail(ctx: CanvasRenderingContext2D) {
     this.trail.forEach((point, index) => {
       const fire = this.cleanStreak >= FIRE_STREAK, alpha = point.life / (fire ? .62 : .3)
-      ctx.fillStyle = fire ? (index < 5 ? `rgba(255,238,30,${alpha * .78})` : index < 13 ? `rgba(255,93,20,${alpha * .55})` : `rgba(196,30,25,${alpha * .3})`) : `rgba(26,15,12,${alpha * .16})`
-      ctx.shadowColor = fire ? (index < 6 ? '#fff02b' : '#ff4b1f') : 'transparent'; ctx.shadowBlur = fire ? 18 : 0
-      const radius = Math.max(4, this.ball.r - index * .48)
+      ctx.fillStyle = fire ? (index < 4 ? `rgba(255,224,52,${alpha * .34})` : index < 11 ? `rgba(255,96,20,${alpha * .24})` : `rgba(184,34,20,${alpha * .12})`) : `rgba(26,15,12,${alpha * .13})`
+      ctx.shadowColor = fire ? (index < 5 ? '#ffd935' : '#ff4b1f') : 'transparent'; ctx.shadowBlur = fire ? Math.max(3, 13 - index * .45) : 0
+      const radius = Math.max(3, this.ball.r * .72 - index * .36)
       for (const offset of this.wrappedRenderOffsets(point.x, radius)) { ctx.beginPath(); ctx.arc(point.x + offset, point.y, radius, 0, Math.PI * 2); ctx.fill() }
     })
     ctx.shadowBlur = 0
+  }
+  private drawFireWake(ctx: CanvasRenderingContext2D, x: number, y: number) {
+    const speed = Math.hypot(this.ball.vx, this.ball.vy)
+    const length = this.ball.r * (1.65 + clamp(speed / 720, 0, 1) * 1.55)
+    const flutter = Math.sin(this.elapsed * 22 + this.ball.rotation * .8) * this.ball.r * .22
+    const angle = speed > 8 ? Math.atan2(this.ball.vy, this.ball.vx) : -Math.PI * .5
+    ctx.save(); ctx.translate(x, y); ctx.rotate(angle); ctx.globalCompositeOperation = 'lighter'
+    const flame = (width: number, reach: number, bend: number, color: string, glow: string) => {
+      ctx.fillStyle = color; ctx.shadowColor = glow; ctx.shadowBlur = width * .55
+      ctx.beginPath(); ctx.moveTo(-this.ball.r * .2, -width)
+      ctx.bezierCurveTo(-reach * .42, -width * .92 + bend, -reach * .76, -width * .34 + bend, -reach, bend)
+      ctx.bezierCurveTo(-reach * .72, width * .32 + bend, -reach * .38, width * .9 + bend, -this.ball.r * .2, width)
+      ctx.quadraticCurveTo(this.ball.r * .18, 0, -this.ball.r * .2, -width); ctx.fill()
+    }
+    flame(this.ball.r * .9, length, flutter, 'rgba(255,55,12,.58)', '#ff3711')
+    flame(this.ball.r * .62, length * .76, -flutter * .42, 'rgba(255,137,18,.76)', '#ff7b16')
+    flame(this.ball.r * .3, length * .48, flutter * .25, 'rgba(255,245,104,.9)', '#fff06c')
+    ctx.restore()
   }
   private wrappedRenderOffsets(x: number, radius: number) {
     const offsets = [0]
@@ -920,21 +939,24 @@ class LoopHoopsController extends BaseController {
   }
   private drawScoreEffect(ctx: CanvasRenderingContext2D) {
     if (this.scoreEffect.life <= 0) return
-    const progress = 1 - this.scoreEffect.life, alpha = Math.min(1, this.scoreEffect.life * 2), rise = progress * 34
+    const progress = 1 - this.scoreEffect.life, alpha = Math.min(1, this.scoreEffect.life * 2.5), rise = progress * 28
     const burstColor = this.scoreEffect.streak >= FIRE_STREAK ? '#ff5a20' : this.scoreEffect.clean ? '#ffe85c' : '#ff4f9c'
-    ctx.save(); ctx.translate(this.scoreEffect.x, this.scoreEffect.y); ctx.globalAlpha = alpha; ctx.strokeStyle = burstColor; ctx.fillStyle = burstColor; ctx.shadowColor = burstColor; ctx.shadowBlur = this.scoreEffect.clean ? 24 : 14
-    ctx.lineWidth = Math.max(2, 7 - progress * 5); ctx.beginPath(); ctx.arc(0, 0, 22 + progress * 68, 0, Math.PI * 2); ctx.stroke()
-    const sparkCount = this.scoreEffect.clean ? 14 : 8
+    ctx.save(); ctx.translate(this.scoreEffect.x, this.scoreEffect.y); ctx.globalAlpha = alpha; ctx.strokeStyle = burstColor; ctx.fillStyle = burstColor; ctx.shadowColor = burstColor; ctx.shadowBlur = this.scoreEffect.clean ? 18 : 10
+    ctx.lineWidth = Math.max(1, 4 - progress * 3); ctx.beginPath(); ctx.ellipse(0, 2, 24 + progress * 28, 8 + progress * 9, 0, 0, Math.PI * 2); ctx.stroke()
+    const sparkCount = this.scoreEffect.clean ? 12 : 7
     for (let i = 0; i < sparkCount; i++) {
-      const angle = i * Math.PI * 2 / sparkCount + this.scoreEffect.streak * .19
-      const inner = 24 + progress * 20, outer = inner + 15 + progress * (26 + i % 3 * 5)
-      ctx.lineWidth = 3 + i % 2; ctx.beginPath(); ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner * .62); ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer * .62); ctx.stroke()
-      ctx.beginPath(); ctx.arc(Math.cos(angle) * outer, Math.sin(angle) * outer * .62, 2.5 + i % 3, 0, Math.PI * 2); ctx.fill()
+      const direction = -Math.PI + i * Math.PI / Math.max(1, sparkCount - 1)
+      const distance = 13 + progress * (24 + i % 3 * 6)
+      const px = Math.cos(direction) * distance, py = Math.sin(direction) * distance - progress * 18 + progress * progress * 20
+      ctx.globalAlpha = alpha * (1 - progress * .35); ctx.beginPath(); ctx.arc(px, py, Math.max(1.2, 3.2 - progress * 1.7 + i % 2), 0, Math.PI * 2); ctx.fill()
     }
     ctx.restore()
-    ctx.save(); ctx.globalAlpha = alpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.shadowColor = burstColor; ctx.shadowBlur = this.scoreEffect.clean ? 24 : 10
-    ctx.font = '900 76px system-ui'; ctx.fillText(String(this.score), this.w * .5, this.h * .46 - rise)
-    ctx.font = '900 24px system-ui'; ctx.fillText(this.scoreEffect.label, this.w * .5, this.h * .46 + 56 - rise)
+    const labelX = this.scoreEffect.x + (this.scoreEffect.x < this.w * .5 ? 72 : -72)
+    const labelY = Math.max(62, this.scoreEffect.y - 42 - rise)
+    const pop = 1 + Math.sin(Math.min(1, progress * 2.2) * Math.PI) * .1
+    ctx.save(); ctx.translate(labelX, labelY); ctx.scale(pop, pop); ctx.globalAlpha = alpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.shadowColor = burstColor; ctx.shadowBlur = this.scoreEffect.clean ? 18 : 8
+    ctx.font = '900 27px system-ui'; ctx.fillText(`+${this.scoreEffect.points}`, 0, 0)
+    ctx.font = '900 12px system-ui'; ctx.fillStyle = this.scoreEffect.streak >= FIRE_STREAK ? '#fff3a0' : '#fff'; ctx.fillText(this.scoreEffect.label.replace(/\s+\+\d+$/, ''), 0, 22)
     ctx.restore()
   }
 }
@@ -1334,18 +1356,10 @@ const drawBasketball = (ctx: CanvasRenderingContext2D, x: number, y: number, r: 
   ctx.save(); ctx.translate(x, y)
   if (fire) {
     const pulse = .5 + Math.sin(rotation * 2.7) * .5
-    ctx.save(); ctx.rotate(-rotation * .38); ctx.globalCompositeOperation = 'lighter'
-    const aura = ctx.createRadialGradient(0, 0, r * .45, 0, 0, r * (1.65 + pulse * .12))
-    aura.addColorStop(0, 'rgba(255,246,74,.72)'); aura.addColorStop(.48, 'rgba(255,111,24,.48)'); aura.addColorStop(1, 'rgba(255,37,8,0)')
-    ctx.fillStyle = aura; ctx.beginPath(); ctx.arc(0, 0, r * (1.72 + pulse * .12), 0, Math.PI * 2); ctx.fill()
-    for (let i = 0; i < 10; i++) {
-      ctx.save(); ctx.rotate(i * Math.PI * .2 + rotation * .17)
-      const length = r * (1.42 + ((i + Math.round(pulse * 2)) % 3) * .13)
-      ctx.fillStyle = i % 2 ? 'rgba(255,71,13,.82)' : 'rgba(255,218,35,.88)'
-      ctx.shadowColor = i % 2 ? '#ff3d0d' : '#ffe52a'; ctx.shadowBlur = 13
-      ctx.beginPath(); ctx.moveTo(-r * .28, -r * .72); ctx.quadraticCurveTo(-r * .18, -r * 1.08, 0, -length); ctx.quadraticCurveTo(r * .2, -r * 1.05, r * .28, -r * .72); ctx.closePath(); ctx.fill(); ctx.restore()
-    }
-    ctx.restore()
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'
+    const aura = ctx.createRadialGradient(0, 0, r * .55, 0, 0, r * (1.72 + pulse * .1))
+    aura.addColorStop(0, 'rgba(255,246,112,.62)'); aura.addColorStop(.45, 'rgba(255,126,24,.38)'); aura.addColorStop(1, 'rgba(255,45,8,0)')
+    ctx.fillStyle = aura; ctx.beginPath(); ctx.arc(0, 0, r * (1.78 + pulse * .1), 0, Math.PI * 2); ctx.fill(); ctx.restore()
   }
   ctx.rotate(rotation); if (fire) { ctx.shadowColor = '#ffdb39'; ctx.shadowBlur = 30 }
   const gradient = ctx.createRadialGradient(-r * .3, -r * .35, 2, 0, 0, r); gradient.addColorStop(0, '#ffb340'); gradient.addColorStop(1, '#df5224'); ctx.fillStyle = gradient; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill()

@@ -1,8 +1,8 @@
-export const APP_VERSION = '0.4.5'
+export const APP_VERSION = '0.4.6'
 
 export const UPDATE_INFO = {
-  title: 'Loop Hoops에 버저비터가 생겼어요',
-  description: '타이머가 끝나면 새 터치만 잠기고 이미 날아간 공은 계속 움직입니다. 마지막 공이 바닥에 닿을 때까지 골을 노릴 수 있습니다.',
+  title: 'Loop Hoops 득점 연출이 새로워졌어요',
+  description: '득점 반응을 골대 주변의 자연스러운 잔광과 점수 팝업으로 다듬고, 클린샷 3연속부터 공에 이동 방향을 따라 흐르는 불꽃을 더했습니다.',
   addedGames: ['hoop-flight', 'dunk-climb', 'loop-hoops', 'crossing-rush', 'neon-escape', 'perfect-stack', 'pin-core', 'pocket-golf'],
-  changes: ['타이머 0초 이후 터치 차단', '버저 이후 공의 물리·골 판정 유지', '버저비터 득점 후 타이머 재충전 없이 바닥 접촉 시 종료'],
+  changes: ['골대 중심의 짧고 자연스러운 득점 이펙트', '클린샷 3연속 FIRE 모드', '공의 속도와 방향에 반응하는 화염 꼬리'],
 } as const
