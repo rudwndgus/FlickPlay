@@ -14,6 +14,14 @@ describe('social app shell', () => {
     expect(onChange).toHaveBeenCalledWith('explore')
   })
 
+  it('exposes an active explore tab as a refresh action', () => {
+    const onChange = vi.fn()
+    render(<AppNavigation activeTab="explore" onChange={onChange} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '탐색 새로고침' }))
+    expect(onChange).toHaveBeenCalledWith('explore')
+  })
+
   it('keeps browsing available when an authenticated action is requested', () => {
     const onClose = vi.fn()
     render(<AuthGate reason="메시지 보내기" onClose={onClose} />)

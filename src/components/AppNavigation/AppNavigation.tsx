@@ -18,7 +18,7 @@ export function AppNavigation({ activeTab, onChange }: Props) {
   return (
     <nav className="app-navigation" aria-label="주요 메뉴">
       {tabs.map(({ id, label, icon: Icon }) => (
-        <button key={id} className={activeTab === id ? 'is-active' : ''} onClick={() => onChange(id)} aria-current={activeTab === id ? 'page' : undefined}>
+        <button key={id} className={activeTab === id ? 'is-active' : ''} onClick={() => onChange(id)} aria-current={activeTab === id ? 'page' : undefined} aria-label={id === 'explore' && activeTab === id ? '탐색 새로고침' : label}>
           <span><Icon size={22} strokeWidth={activeTab === id ? 2.7 : 2} /></span>
           <small>{label}</small>
         </button>

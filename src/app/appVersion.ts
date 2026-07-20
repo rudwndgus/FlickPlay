@@ -1,8 +1,8 @@
-export const APP_VERSION = '0.5.3'
+export const APP_VERSION = '0.5.4'
 
 export const UPDATE_INFO = {
-  title: '더 빠른 게임 피드와 자유로운 골프 조준',
-  description: 'Pocket Golf는 화면 어디서든 당겨 조준할 수 있고, 게임 피드는 다음 미리보기를 미리 준비해 넘기는 순간 바로 재생합니다.',
+  title: '끝없이 이어지는 랜덤 게임 피드',
+  description: '게임 피드가 랜덤 순서로 끝없이 이어지고, 활성화된 탐색 탭을 다시 누르면 새로운 순서로 즉시 새로고침됩니다.',
   addedGames: ['hoop-flight', 'dunk-climb', 'loop-hoops', 'crossing-rush', 'neon-escape', 'perfect-stack', 'pin-core', 'pocket-golf'],
-  changes: ['화면 전체에서 시작하는 골프 드래그', '인접 게임 미리보기 선로딩', '미리보기 메모리·렌더링 비용 절감'],
+  changes: ['랜덤 게임 노출', '끝없는 순환 스크롤', '탐색 탭 재탭 새로고침'],
 } as const

@@ -8,3 +8,11 @@ export function shuffleGames<T>(games: readonly T[], random: () => number = Math
 
   return shuffled
 }
+
+export function refreshGameOrder<T>(games: readonly T[], currentGame: T | undefined, random: () => number = Math.random): T[] {
+  const shuffled = shuffleGames(games, random)
+  if (shuffled.length > 1 && shuffled[0] === currentGame) {
+    ;[shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]]
+  }
+  return shuffled
+}

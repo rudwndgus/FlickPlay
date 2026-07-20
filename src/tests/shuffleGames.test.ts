@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shuffleGames } from '../feed/shuffleGames'
+import { refreshGameOrder, shuffleGames } from '../feed/shuffleGames'
 
 describe('shuffleGames', () => {
   it('returns a shuffled copy without mutating or losing games', () => {
@@ -16,5 +16,13 @@ describe('shuffleGames', () => {
 
   it('handles an empty feed', () => {
     expect(shuffleGames([], () => 0.5)).toEqual([])
+  })
+
+  it('puts a different game first when refreshing the current feed', () => {
+    const games = ['a', 'b', 'c'] as const
+    const refreshed = refreshGameOrder(games, 'a', () => 0.99)
+
+    expect(refreshed[0]).not.toBe('a')
+    expect(new Set(refreshed)).toEqual(new Set(games))
   })
 })
