@@ -700,8 +700,8 @@ class LoopHoopsController extends BaseController {
     const points = clean ? Math.min(MAX_CLEAN_COMBO, this.cleanStreak) : 1
     this.setScore(this.score + points); this.options.onImpact(clean ? 'perfect' : 'score')
     this.scoreEffect = { ...scoredAt, life: 1, label: buzzerBeater ? `BUZZER BEATER!  +${points}` : clean ? (this.cleanStreak >= FIRE_STREAK ? `FIRE ×${this.cleanStreak}  +${points}` : this.cleanStreak === 2 ? 'PERFECT ×2  +2' : 'CLEAN!  +1') : 'SCORE!  +1', points, clean, streak: this.cleanStreak }
-    if (!buzzerBeater) this.timeLeft = 1
-    else { this.target.pulse = 1; this.target.netPunch = 1; return }
+    this.timeLeft = 1
+    this.buzzerActive = false
     this.target.side = this.target.side === -1 ? 1 : -1
     this.target.x = this.sideHoopAnchorX(this.target.side)
     this.target.y = random(this.h * .27, this.h * .55)
