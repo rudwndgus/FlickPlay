@@ -53,6 +53,8 @@ export interface MiniGameModule {
   fullDescription: string
   icon: string
   category: string
+  scoreDirection?: 'high' | 'low'
+  scoreSuffix?: string
   objective: string
   theme: GameTheme
   controls: GameControlGuide[]

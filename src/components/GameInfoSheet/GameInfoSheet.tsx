@@ -1,5 +1,6 @@
 import { ChevronDown, Flag, Gamepad2, Lightbulb, Target, TriangleAlert, Trophy } from 'lucide-react'
 import type { MiniGameModule } from '../../games/types'
+import { formatGameScore } from '../../games/scoring'
 
 interface Props { game: MiniGameModule | null; bestScore: number; onClose: () => void; onPlay: (game: MiniGameModule) => void }
 
@@ -16,7 +17,7 @@ export function GameInfoSheet({ game, bestScore, onClose, onPlay }: Props) {
         <div className="sheet-section"><h3><Target size={18} /> 점수와 보너스</h3>{game.scoringRules.map((rule) => <div className="rule-row" key={rule.label}><strong>{rule.label}</strong><span>{rule.value}</span></div>)}</div>
         <div className="sheet-section"><h3><TriangleAlert size={18} /> 게임 종료</h3><ul className="guide-list danger-list">{game.failureConditions.map((condition) => <li key={condition}>{condition}</li>)}</ul></div>
         <div className="sheet-section"><h3><Lightbulb size={18} /> 플레이 팁</h3><ul className="guide-list">{game.tips.map((tip) => <li key={tip}>{tip}</li>)}</ul></div>
-        <div className="best-chip"><Trophy size={17} /> 내 최고 기록 <strong>{bestScore}</strong></div>
+        <div className="best-chip"><Trophy size={17} /> 내 최고 기록 <strong>{bestScore > 0 ? formatGameScore(game, bestScore) : '기록 없음'}</strong></div>
         <button className="primary-button" style={{ background: game.theme.accent, color: game.theme.surface }} onClick={() => onPlay(game)}>지금 플레이</button>
       </section>
     </div>

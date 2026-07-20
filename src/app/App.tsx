@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { GameFeed } from '../feed/GameFeed'
 import { gameRegistry } from '../games/registry'
 import type { GameStats, MiniGameModule } from '../games/types'
+import { selectBestGameScore } from '../games/scoring'
 import { GameInfoSheet } from '../components/GameInfoSheet/GameInfoSheet'
 import { GamePlayer } from '../components/GamePlayer/GamePlayer'
 import { UpdatePrompt } from '../components/UpdatePrompt/UpdatePrompt'
@@ -33,7 +34,11 @@ export function App() {
 
   const liked = useMemo(() => new Set(state.liked), [state.liked])
   const bookmarked = useMemo(() => new Set(state.bookmarked), [state.bookmarked])
-  const bestScores = useMemo(() => Object.fromEntries(Object.entries(state.stats).map(([id, stats]) => [id, stats.bestScore])), [state.stats])
+  const bestScores = useMemo(() => Object.fromEntries(Object.entries(state.stats).map(([id, stats]) => {
+    const game = gameRegistry.find((item) => item.id === id)
+    const legacyLowScore = game?.scoreDirection === 'low' && stats.achievements.lowScoreFormat !== true
+    return [id, legacyLowScore ? 0 : stats.bestScore]
+  })), [state.stats])
   const toggleMute = () => setState((current) => { const muted = !current.muted; audioManager.setMuted(muted); if (!muted) audioManager.unlock(); return { ...current, muted } })
   const openGame = (game: MiniGameModule) => { setInfoGame(null); setActiveGame(game); audioManager.unlock(); navigate(`/game/${game.slug}`) }
   const closeGame = useCallback(() => navigate('/explore'), [navigate])
@@ -50,7 +55,9 @@ export function App() {
   const recordResult = (game: MiniGameModule, score: number, elapsedMs: number) => {
     setState((current) => {
       const previous = current.stats[game.id] ?? { gameId: game.id, bestScore: 0, lastScore: 0, playCount: 0, totalPlayTime: 0, lastPlayedAt: 0, achievements: {} }
-      const stats: GameStats = { ...previous, bestScore: Math.max(previous.bestScore, score), lastScore: score, playCount: previous.playCount + 1, totalPlayTime: previous.totalPlayTime + Math.round(elapsedMs / 1000), lastPlayedAt: Date.now() }
+      const previousBest = game.scoreDirection === 'low' && previous.achievements.lowScoreFormat !== true ? 0 : previous.bestScore
+      const achievements = game.scoreDirection === 'low' ? { ...previous.achievements, lowScoreFormat: true } : previous.achievements
+      const stats: GameStats = { ...previous, achievements, bestScore: selectBestGameScore(game, previousBest, score), lastScore: score, playCount: previous.playCount + 1, totalPlayTime: previous.totalPlayTime + Math.round(elapsedMs / 1000), lastPlayedAt: Date.now() }
       return { ...current, stats: { ...current.stats, [game.id]: stats } }
     })
   }

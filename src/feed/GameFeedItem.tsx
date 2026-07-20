@@ -1,5 +1,6 @@
 import { Bookmark, Heart, Info, Play, Send, Sparkles, Volume2, VolumeX } from 'lucide-react'
 import type { MiniGameModule } from '../games/types'
+import { formatGameScore } from '../games/scoring'
 import { GameCanvas } from '../components/GameCanvas/GameCanvas'
 
 interface Props {
@@ -23,7 +24,7 @@ export function GameFeedItem({ game, index, total, active, current, liked, bookm
           <div className="eyebrow"><Sparkles size={13} /> {game.kicker}</div>
           <button className="title-button" onClick={() => onPlay(game)}><h1>{game.title}</h1></button>
           <button className="description-button" onClick={() => onInfo(game)}>{game.shortDescription} <span>더보기</span></button>
-          <div className="meta-line"><span>{game.category}</span>{bestScore > 0 && <span>BEST {bestScore}</span>}</div>
+          <div className="meta-line"><span>{game.category}</span>{bestScore > 0 && <span>BEST {formatGameScore(game, bestScore)}</span>}</div>
         </div>
         <nav className="action-rail" aria-label="게임 액션">
           <button onClick={() => onLike(game.id)} className={liked ? 'active-like' : ''} aria-label="좋아요"><Heart size={25} fill={liked ? 'currentColor' : 'none'} /><span>{liked ? 'Liked' : 'Like'}</span></button>

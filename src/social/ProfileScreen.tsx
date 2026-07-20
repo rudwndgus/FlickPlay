@@ -1,6 +1,7 @@
 import { Bookmark, Grid3X3, LogIn, Settings, Trophy } from 'lucide-react'
 import { gameById } from '../games/gameDefinitions'
 import type { GameStats } from '../games/types'
+import { formatGameScore } from '../games/scoring'
 
 interface Props {
   stats: Record<string, GameStats>
@@ -11,7 +12,10 @@ interface Props {
 export function ProfileScreen({ stats, bookmarked, onRequireAuth }: Props) {
   const played = Object.values(stats).sort((a, b) => b.lastPlayedAt - a.lastPlayedAt)
   const totalPlays = played.reduce((sum, item) => sum + item.playCount, 0)
-  const bestTotal = played.reduce((sum, item) => sum + item.bestScore, 0)
+  const bestTotal = played.reduce((sum, item) => {
+    const game = gameById(item.gameId)
+    return sum + (game?.scoreDirection === 'low' && item.achievements.lowScoreFormat !== true ? 0 : item.bestScore)
+  }, 0)
 
   return (
     <main className="social-screen profile-screen" aria-label="프로필">
@@ -40,7 +44,8 @@ export function ProfileScreen({ stats, bookmarked, onRequireAuth }: Props) {
         {played.length > 0 ? played.map((record) => {
           const game = gameById(record.gameId)
           if (!game) return null
-          return <button key={record.gameId} onClick={() => onRequireAuth('기록 공유')} style={{ background: `linear-gradient(145deg, ${game.theme.background}, ${game.theme.surface})` }}><span style={{ background: game.theme.accent, color: game.theme.surface }}>{game.icon}</span><strong>{record.bestScore}</strong><small>{game.title}</small></button>
+          const legacyLowScore = game.scoreDirection === 'low' && record.achievements.lowScoreFormat !== true
+          return <button key={record.gameId} onClick={() => onRequireAuth('기록 공유')} style={{ background: `linear-gradient(145deg, ${game.theme.background}, ${game.theme.surface})` }}><span style={{ background: game.theme.accent, color: game.theme.surface }}>{game.icon}</span><strong>{legacyLowScore ? '—' : formatGameScore(game, record.bestScore)}</strong><small>{game.title}</small></button>
         }) : (
           <div className="empty-records"><Trophy size={29} /><strong>아직 플레이 기록이 없어요</strong><span>탐색 탭에서 게임을 시작하면 여기에 최고 기록이 모입니다.</span></div>
         )}

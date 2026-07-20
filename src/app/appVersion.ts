@@ -1,8 +1,8 @@
-export const APP_VERSION = '0.4.7'
+export const APP_VERSION = '0.5.0'
 
 export const UPDATE_INFO = {
-  title: 'Loop Hoops 득점 판정이 정확해졌어요',
-  description: '림 안쪽 가장자리를 스치며 통과한 공도 놓치지 않고 득점합니다. 중앙 통과는 클린샷, 가장자리 통과는 일반 득점으로 정확하게 구분합니다.',
+  title: 'Pocket Golf 5홀 코스가 열렸어요',
+  description: '서로 다른 5개 코스에서 벽 반사와 범퍼를 활용하고 모래와 물을 피해 총 타수를 줄이세요. 이제 가장 낮은 타수가 최고 기록으로 저장됩니다.',
   addedGames: ['hoop-flight', 'dunk-climb', 'loop-hoops', 'crossing-rush', 'neon-escape', 'perfect-stack', 'pin-core', 'pocket-golf'],
-  changes: ['림 안쪽 통과 판정 보강', '가장자리 득점과 클린샷 구분', '백보드–림 바깥 틈의 오득점 차단 유지'],
+  changes: ['난도가 상승하는 5개 미니골프 스테이지', '벽·범퍼·모래·물 장애물과 벌타', '낮은 총 타수를 최고 기록으로 저장'],
 } as const

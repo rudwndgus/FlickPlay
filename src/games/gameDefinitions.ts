@@ -83,14 +83,15 @@ const definitions: Definition[] = [
   },
   {
     id: 'pocket-golf', slug: 'pocket-golf', title: 'Pocket Golf', kicker: 'A TINY FAIRWAY', icon: 'PG', category: 'Mini Golf',
-    shortDescription: '방향과 힘, 벽 반사를 직접 설계해 작은 코스의 홀을 연속 공략하세요.',
-    fullDescription: '공이 멈춘 상태에서 뒤로 당겨 샷 방향과 세기를 정합니다. 손을 놓으면 당긴 반대 방향으로 공이 출발하며 코스 가장자리에서 반사됩니다. 충분히 느린 속도로 홀에 들어가야 성공합니다.',
-    objective: '각 홀을 가능한 적은 타수로 넣고 연속해서 더 많은 홀을 완료하세요.',
-    theme: { background: '#58ad6d', surface: '#153e2c', accent: '#fff27a', accent2: '#ef7065', text: '#ffffff', muted: '#c8ebcf', headerStyle: 'light' },
-    controls: [{ label: '당기기', description: '공이 거의 멈췄을 때 화면을 누르고 공의 반대쪽으로 최대 150px까지 당깁니다. 점선이 예상 방향을 표시합니다.' }, { label: '놓기', description: '손을 놓으면 당긴 반대 방향으로 샷합니다. 하단 막대에서 현재 파워를 확인할 수 있습니다.' }],
-    scoringRules: [{ label: '홀 완료', value: '공이 홀에 들어갈 때마다 +1점' }, { label: '타수', value: '샷 횟수는 홀마다 별도로 표시되며 성공 시 0으로 초기화' }, { label: '홀인원', value: '1타 성공 기록은 표시되지만 현재 추가 점수는 없음' }],
-    failureConditions: ['시간 제한이나 게임 오버는 없습니다. 공이 멈추면 계속 다음 샷을 시도할 수 있습니다.'],
-    tips: ['홀을 너무 빠르게 통과하면 들어가지 않으므로 마지막 구간에서는 힘을 줄이세요.', '코스 가장자리 반사는 속도의 일부를 잃으므로 강한 뱅크샷에 유리합니다.', '공이 움직이는 동안에는 새 드래그가 시작되지 않습니다.'],
+    scoreDirection: 'low', scoreSuffix: '타',
+    shortDescription: '벽·범퍼·모래·물 장애물을 공략해 5개 홀의 총 타수를 줄이세요.',
+    fullDescription: '공을 뒤로 당겨 방향과 힘을 정하고 5개의 서로 다른 미니 코스를 연속 공략합니다. 벽 반사를 활용하고 범퍼와 모래를 계산하며 물을 피하세요. 마지막 홀까지 끝낸 총 타수가 기록되며 적을수록 높은 순위입니다.',
+    objective: '5개 스테이지를 완주하고 총 타수를 가능한 한 낮게 기록하세요.',
+    theme: { background: '#163d31', surface: '#0c2721', accent: '#f7df73', accent2: '#ef7065', text: '#ffffff', muted: '#b9d8c6', headerStyle: 'dark' },
+    controls: [{ label: '공 잡기', description: '공이 완전히 멈췄을 때 공 주변을 누르면 조준이 시작됩니다.' }, { label: '당겼다 놓기', description: '샷의 반대 방향으로 최대 140px까지 당긴 뒤 손을 놓습니다. 점선과 파워 표시로 세기를 확인할 수 있습니다.' }],
+    scoringRules: [{ label: '최종 기록', value: '5개 홀을 완료할 때까지 사용한 총 타수가 기록되며 낮을수록 좋습니다.' }, { label: '파(Par)', value: '각 홀의 기준 타수와 현재 홀 타수를 상단에서 비교할 수 있습니다.' }, { label: '물 장애물', value: '물에 빠지면 이전 샷 위치로 돌아가고 벌타 +1이 추가됩니다.' }],
+    failureConditions: ['게임 오버는 없으며 5번 홀을 넣으면 코스가 종료되고 총 타수가 확정됩니다.'],
+    tips: ['직선 길이 막혔다면 코스 벽을 이용한 뱅크샷이 더 적은 타수일 수 있습니다.', '모래에서는 공이 급격히 느려지므로 다음 샷 위치를 만들 때 활용할 수 있습니다.', '홀을 너무 빠르게 지나가면 들어가지 않으므로 마지막 샷은 힘을 줄이세요.'],
   },
 ]
 

@@ -1347,34 +1347,245 @@ class PinCoreController extends BaseController {
   }
 }
 
+type GolfRect = { x: number; y: number; width: number; height: number }
+type GolfEllipse = { x: number; y: number; rx: number; ry: number }
+type GolfCircle = { x: number; y: number; r: number }
+type GolfStageDefinition = {
+  name: string
+  par: number
+  tee: [number, number]
+  hole: [number, number]
+  walls: Array<[number, number, number, number]>
+  bumpers: Array<[number, number, number]>
+  bunkers: Array<[number, number, number, number]>
+  waters: Array<[number, number, number, number]>
+  waypoints: Array<[number, number]>
+}
+
+const GOLF_STAGES: GolfStageDefinition[] = [
+  { name: 'GARDEN GATE', par: 2, tee: [.25, .88], hole: [.73, .12], walls: [[.06, .56, .72, .035]], bumpers: [[.79, .69, .045]], bunkers: [[.47, .31, .18, .065]], waters: [], waypoints: [[.94, .49], [.73, .12]] },
+  { name: 'SWITCHBACK', par: 4, tee: [.7, .9], hole: [.72, .1], walls: [[.05, .67, .73, .035], [.24, .38, .71, .035]], bumpers: [[.86, .54, .042]], bunkers: [[.14, .52, .1, .06]], waters: [[.48, .8, .11, .05]], waypoints: [[.9, .59], [.1, .46], [.1, .3], [.72, .1]] },
+  { name: 'ISLAND LINE', par: 4, tee: [.16, .88], hole: [.82, .12], walls: [[.43, .62, .045, .22], [.53, .2, .045, .22]], bumpers: [[.3, .57, .047], [.72, .45, .047]], bunkers: [[.23, .28, .13, .065]], waters: [[.51, .51, .21, .115]], waypoints: [[.55, .91], [.84, .67], [.86, .4], [.82, .12]] },
+  { name: 'BUMPER GROVE', par: 3, tee: [.5, .9], hole: [.5, .1], walls: [[.05, .5, .31, .032], [.64, .5, .31, .032]], bumpers: [[.29, .7, .052], [.71, .7, .052], [.5, .52, .06], [.3, .33, .05], [.7, .33, .05]], bunkers: [[.5, .26, .15, .06]], waters: [], waypoints: [[.43, .61], [.58, .39], [.5, .1]] },
+  { name: 'CHAMPIONSHIP', par: 4, tee: [.5, .91], hole: [.5, .09], walls: [[.04, .73, .69, .034], [.27, .53, .69, .034], [.04, .33, .69, .034]], bumpers: [[.84, .63, .043], [.16, .43, .043], [.84, .23, .043]], bunkers: [[.52, .64, .13, .058], [.48, .24, .13, .058]], waters: [[.5, .43, .12, .052]], waypoints: [[.84, .65], [.16, .45], [.84, .25], [.5, .09]] },
+]
+
 class PocketGolfController extends BaseController {
-  private ball = { x: 195, y: 690, vx: 0, vy: 0, r: 11 }
-  private hole = { x: 210, y: 190, r: 17 }
+  private ball = { x: 195, y: 690, vx: 0, vy: 0, r: 10 }
+  private hole = { x: 210, y: 190, r: 15 }
+  private walls: GolfRect[] = []
+  private bumpers: GolfCircle[] = []
+  private bunkers: GolfEllipse[] = []
+  private waters: GolfEllipse[] = []
   private dragStart: Point | null = null
   private dragPoint: Point | null = null
-  private strokes = 0
+  private shotOrigin: Point = { x: 195, y: 690 }
+  private stageIndex = 0
+  private stageStrokes = 0
+  private totalStrokes = 0
+  private completeTimer = 0
+  private sinkProgress = 0
+  private feedback = ''
+  private feedbackLife = 0
   private autoClock = 0
-  reset() { this.ball = { x: this.w * .5, y: this.h * .78, vx: 0, vy: 0, r: 11 }; this.hole = { x: random(80, this.w - 80), y: random(145, this.h * .33), r: 17 }; this.dragStart = null; this.dragPoint = null; this.strokes = 0; this.autoClock = 0 }
+  private autoWaypoint = 0
+
   constructor(theme: GameTheme, options: ControllerOptions) { super(theme, options); this.reset() }
-  pointerDown(x: number, y: number) { if (Math.hypot(this.ball.vx, this.ball.vy) < 8) { this.dragStart = { x: this.ball.x, y: this.ball.y }; this.dragPoint = { x, y } } }
-  pointerMove(x: number, y: number) { if (this.dragStart) this.dragPoint = { x, y } }
-  pointerUp(x: number, y: number) { if (!this.dragStart) return; const dx = clamp(this.dragStart.x - x, -150, 150), dy = clamp(this.dragStart.y - y, -150, 150); this.ball.vx = dx * 3.5; this.ball.vy = dy * 3.5; this.strokes++; this.dragStart = null; this.dragPoint = null; this.options.onImpact('tap') }
-  autopilot() { if (Math.hypot(this.ball.vx, this.ball.vy) < 5) { const dx = (this.ball.x - this.hole.x) * .35, dy = (this.ball.y - this.hole.y) * .24; this.pointerDown(this.ball.x, this.ball.y); this.pointerUp(this.ball.x + dx, this.ball.y + dy) } }
-  tick(dt: number) {
-    this.ball.x += this.ball.vx * dt; this.ball.y += this.ball.vy * dt; const drag = Math.pow(.22, dt); this.ball.vx *= drag; this.ball.vy *= drag
-    if (this.ball.x < 24 || this.ball.x > this.w - 24) { this.ball.x = clamp(this.ball.x, 24, this.w - 24); this.ball.vx *= -.72 }
-    if (this.ball.y < 85 || this.ball.y > this.h - 80) { this.ball.y = clamp(this.ball.y, 85, this.h - 80); this.ball.vy *= -.72 }
-    if (distance(this.ball, this.hole) < this.hole.r && Math.hypot(this.ball.vx, this.ball.vy) < 180) { this.addScore(1); this.ball = { x: this.w * .5, y: this.h * .78, vx: 0, vy: 0, r: 11 }; this.hole = { x: random(75, this.w - 75), y: random(140, this.h * .34), r: 17 }; this.strokes = 0 }
-    if (this.options.preview) { this.autoClock += dt; if (this.autoClock > 1.6) { this.autoClock = 0; this.autopilot() } }
+
+  resize(width: number, height: number) {
+    const previous = this.courseBounds()
+    const ballPosition = { x: (this.ball.x - previous.left) / previous.width, y: (this.ball.y - previous.top) / previous.height }
+    const originPosition = { x: (this.shotOrigin.x - previous.left) / previous.width, y: (this.shotOrigin.y - previous.top) / previous.height }
+    super.resize(width, height)
+    this.layoutStage()
+    this.ball.x = this.courseX(ballPosition.x); this.ball.y = this.courseY(ballPosition.y)
+    this.shotOrigin = { x: this.courseX(originPosition.x), y: this.courseY(originPosition.y) }
   }
+
+  reset() {
+    this.stageIndex = 0; this.stageStrokes = 0; this.totalStrokes = 0; this.completeTimer = 0; this.sinkProgress = 0
+    this.feedback = ''; this.feedbackLife = 0; this.dragStart = null; this.dragPoint = null; this.autoClock = 0; this.autoWaypoint = 0
+    this.loadStage(0)
+  }
+
+  private courseBounds() {
+    const left = 18, top = 78, right = this.w - 18, bottom = this.h - 36
+    return { left, top, right, bottom, width: right - left, height: bottom - top }
+  }
+  private courseX(value: number) { const course = this.courseBounds(); return course.left + course.width * value }
+  private courseY(value: number) { const course = this.courseBounds(); return course.top + course.height * value }
+  private toEllipse(value: [number, number, number, number]): GolfEllipse {
+    const course = this.courseBounds()
+    return { x: this.courseX(value[0]), y: this.courseY(value[1]), rx: course.width * value[2], ry: course.height * value[3] }
+  }
+  private layoutStage() {
+    const definition = GOLF_STAGES[this.stageIndex] ?? GOLF_STAGES[0], course = this.courseBounds()
+    this.hole = { x: this.courseX(definition.hole[0]), y: this.courseY(definition.hole[1]), r: 15 }
+    this.walls = definition.walls.map(([x, y, width, height]) => ({ x: this.courseX(x), y: this.courseY(y), width: course.width * width, height: Math.max(20, course.height * height) }))
+    this.bumpers = definition.bumpers.map(([x, y, radius]) => ({ x: this.courseX(x), y: this.courseY(y), r: course.width * radius }))
+    this.bunkers = definition.bunkers.map((item) => this.toEllipse(item))
+    this.waters = definition.waters.map((item) => this.toEllipse(item))
+  }
+  private loadStage(index: number) {
+    this.stageIndex = index; this.stageStrokes = 0; this.completeTimer = 0; this.sinkProgress = 0; this.autoWaypoint = 0
+    this.dragStart = null; this.dragPoint = null; this.layoutStage()
+    const tee = GOLF_STAGES[index].tee
+    this.ball = { x: this.courseX(tee[0]), y: this.courseY(tee[1]), vx: 0, vy: 0, r: 10 }
+    this.shotOrigin = { x: this.ball.x, y: this.ball.y }
+    this.feedback = `HOLE ${index + 1}`; this.feedbackLife = 1
+  }
+
+  pointerDown(x: number, y: number) {
+    if (this.status !== 'playing' || this.completeTimer > 0 || Math.hypot(this.ball.vx, this.ball.vy) >= 7 || distance({ x, y }, this.ball) > 48) return
+    this.dragStart = { x, y }; this.dragPoint = { x, y }
+  }
+  pointerMove(x: number, y: number) { if (this.dragStart) this.dragPoint = { x, y } }
+  pointerUp(x: number, y: number) {
+    if (!this.dragStart) return
+    const pullX = this.dragStart.x - x, pullY = this.dragStart.y - y, pullDistance = Math.hypot(pullX, pullY)
+    this.dragStart = null; this.dragPoint = null
+    if (pullDistance < 10) return
+    const power = Math.min(140, pullDistance), scale = power * 4.2 / pullDistance
+    this.shotOrigin = { x: this.ball.x, y: this.ball.y }
+    this.ball.vx = pullX * scale; this.ball.vy = pullY * scale
+    this.stageStrokes++; this.totalStrokes++; this.setScore(this.totalStrokes); this.feedback = `${this.stageStrokes} SHOT`; this.feedbackLife = .7
+    this.options.onImpact('tap')
+  }
+  autopilot() {
+    if (this.completeTimer > 0 || Math.hypot(this.ball.vx, this.ball.vy) >= 7) return
+    const definition = GOLF_STAGES[this.stageIndex], normalizedTarget = definition.waypoints[Math.min(this.autoWaypoint, definition.waypoints.length - 1)]
+    const target = { x: this.courseX(normalizedTarget[0]), y: this.courseY(normalizedTarget[1]) }
+    if (distance(this.ball, target) < 42 && this.autoWaypoint < definition.waypoints.length - 1) { this.autoWaypoint++; return }
+    const dx = target.x - this.ball.x, dy = target.y - this.ball.y, shotDistance = Math.hypot(dx, dy)
+    if (shotDistance < 2) return
+    const pull = Math.min(140, Math.max(12, shotDistance * .255)), nx = dx / shotDistance, ny = dy / shotDistance
+    this.pointerDown(this.ball.x, this.ball.y); this.pointerUp(this.ball.x - nx * pull, this.ball.y - ny * pull)
+  }
+
+  tick(dt: number) {
+    this.feedbackLife = Math.max(0, this.feedbackLife - dt * 1.45)
+    if (this.completeTimer > 0) {
+      this.completeTimer = Math.max(0, this.completeTimer - dt); this.sinkProgress = Math.min(1, this.sinkProgress + dt * 2.4)
+      if (this.completeTimer <= 0) this.advanceStage()
+      return
+    }
+    const steps = Math.max(1, Math.ceil(dt / MAX_PHYSICS_STEP)), step = dt / steps
+    for (let index = 0; index < steps && this.completeTimer <= 0; index++) this.stepGolfPhysics(step)
+    if (Math.hypot(this.ball.vx, this.ball.vy) < 5) { this.ball.vx = 0; this.ball.vy = 0 }
+    if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .75) { this.autoClock = 0; this.autopilot() } }
+  }
+  private stepGolfPhysics(dt: number) {
+    this.ball.x += this.ball.vx * dt; this.ball.y += this.ball.vy * dt
+    const course = this.courseBounds(), restitution = .7
+    if (this.ball.x < course.left + this.ball.r) { this.ball.x = course.left + this.ball.r; this.ball.vx = Math.abs(this.ball.vx) * restitution }
+    if (this.ball.x > course.right - this.ball.r) { this.ball.x = course.right - this.ball.r; this.ball.vx = -Math.abs(this.ball.vx) * restitution }
+    if (this.ball.y < course.top + this.ball.r) { this.ball.y = course.top + this.ball.r; this.ball.vy = Math.abs(this.ball.vy) * restitution }
+    if (this.ball.y > course.bottom - this.ball.r) { this.ball.y = course.bottom - this.ball.r; this.ball.vy = -Math.abs(this.ball.vy) * restitution }
+    this.walls.forEach((wall) => this.collideGolfWall(wall))
+    this.bumpers.forEach((bumper) => this.collideGolfBumper(bumper))
+    if (this.waters.some((water) => this.insideGolfEllipse(water))) { this.takeWaterPenalty(); return }
+    const inBunker = this.bunkers.some((bunker) => this.insideGolfEllipse(bunker))
+    const friction = Math.pow(inBunker ? .018 : .34, dt)
+    this.ball.vx *= friction; this.ball.vy *= friction
+    if (distance(this.ball, this.hole) <= this.hole.r + 2 && Math.hypot(this.ball.vx, this.ball.vy) < 205) this.sinkHole()
+  }
+  private collideGolfWall(wall: GolfRect) {
+    const left = wall.x - this.ball.r, right = wall.x + wall.width + this.ball.r, top = wall.y - this.ball.r, bottom = wall.y + wall.height + this.ball.r
+    if (this.ball.x <= left || this.ball.x >= right || this.ball.y <= top || this.ball.y >= bottom) return
+    const overlaps = [this.ball.x - left, right - this.ball.x, this.ball.y - top, bottom - this.ball.y]
+    const smallest = Math.min(...overlaps), bounce = .72
+    if (smallest === overlaps[0]) { this.ball.x = left; this.ball.vx = -Math.abs(this.ball.vx) * bounce }
+    else if (smallest === overlaps[1]) { this.ball.x = right; this.ball.vx = Math.abs(this.ball.vx) * bounce }
+    else if (smallest === overlaps[2]) { this.ball.y = top; this.ball.vy = -Math.abs(this.ball.vy) * bounce }
+    else { this.ball.y = bottom; this.ball.vy = Math.abs(this.ball.vy) * bounce }
+  }
+  private collideGolfBumper(bumper: GolfCircle) {
+    const dx = this.ball.x - bumper.x, dy = this.ball.y - bumper.y, minDistance = this.ball.r + bumper.r, currentDistance = Math.hypot(dx, dy)
+    if (currentDistance >= minDistance) return
+    const nx = currentDistance > .001 ? dx / currentDistance : 1, ny = currentDistance > .001 ? dy / currentDistance : 0
+    this.ball.x = bumper.x + nx * (minDistance + .2); this.ball.y = bumper.y + ny * (minDistance + .2)
+    const impact = this.ball.vx * nx + this.ball.vy * ny
+    if (impact < 0) { this.ball.vx -= 1.8 * impact * nx; this.ball.vy -= 1.8 * impact * ny }
+  }
+  private insideGolfEllipse(ellipse: GolfEllipse) {
+    const dx = (this.ball.x - ellipse.x) / ellipse.rx, dy = (this.ball.y - ellipse.y) / ellipse.ry
+    return dx * dx + dy * dy < 1
+  }
+  private takeWaterPenalty() {
+    this.stageStrokes++; this.totalStrokes++; this.setScore(this.totalStrokes)
+    this.ball.x = this.shotOrigin.x; this.ball.y = this.shotOrigin.y; this.ball.vx = 0; this.ball.vy = 0
+    this.feedback = 'WATER  +1'; this.feedbackLife = 1; this.options.onImpact('fail')
+  }
+  private sinkHole() {
+    this.ball.x = this.hole.x; this.ball.y = this.hole.y; this.ball.vx = 0; this.ball.vy = 0; this.dragStart = null; this.dragPoint = null
+    this.completeTimer = 1.05; this.sinkProgress = 0
+    const par = GOLF_STAGES[this.stageIndex].par, difference = this.stageStrokes - par
+    this.feedback = this.stageStrokes === 1 ? 'HOLE IN ONE!' : difference <= -2 ? 'EAGLE!' : difference === -1 ? 'BIRDIE!' : difference === 0 ? 'PAR' : `+${difference}`
+    this.feedbackLife = 1.4; this.options.onImpact(difference <= 0 ? 'perfect' : 'score')
+  }
+  private advanceStage() {
+    if (this.stageIndex < GOLF_STAGES.length - 1) { this.loadStage(this.stageIndex + 1); return }
+    if (this.options.preview) { this.restart(); return }
+    this.status = 'finished'; this.options.onFinish(this.totalStrokes)
+  }
+
   render(ctx: CanvasRenderingContext2D) {
-    this.paintBackdrop(ctx, '#67bd78', '#27613f')
-    ctx.fillStyle = '#7cca86'; roundedRect(ctx, 30, 78, this.w - 60, this.h - 150, 48); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 3; ctx.stroke()
-    ctx.fillStyle = '#d3b46a'; ctx.beginPath(); ctx.ellipse(this.w * .25, this.h * .42, 48, 67, -.2, 0, Math.PI * 2); ctx.fill()
-    ctx.fillStyle = '#195839'; ctx.beginPath(); ctx.ellipse(this.hole.x, this.hole.y, this.hole.r, this.hole.r * .45, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(this.hole.x, this.hole.y); ctx.lineTo(this.hole.x, this.hole.y - 72); ctx.stroke(); ctx.fillStyle = '#ff625b'; ctx.beginPath(); ctx.moveTo(this.hole.x, this.hole.y - 72); ctx.lineTo(this.hole.x + 38, this.hole.y - 58); ctx.lineTo(this.hole.x, this.hole.y - 46); ctx.fill()
-    if (this.dragStart && this.dragPoint) { const dx = this.dragStart.x - this.dragPoint.x, dy = this.dragStart.y - this.dragPoint.y; ctx.strokeStyle = 'rgba(255,255,255,.65)'; ctx.setLineDash([8, 8]); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(this.ball.x, this.ball.y); ctx.lineTo(this.ball.x + dx * 1.6, this.ball.y + dy * 1.6); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = 'rgba(255,242,122,.8)'; roundedRect(ctx, 45, this.h - 110, clamp(Math.hypot(dx, dy), 0, 150) / 150 * (this.w - 90), 9, 5); ctx.fill() }
-    ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 10; ctx.beginPath(); ctx.arc(this.ball.x, this.ball.y, this.ball.r, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0
-    drawGameLabel(ctx, 'PULL • AIM • RELEASE', `${this.score} holes  ·  ${this.strokes} shots`, this.w, this.h)
+    const course = this.courseBounds(), definition = GOLF_STAGES[this.stageIndex]
+    const backdrop = ctx.createLinearGradient(0, 0, 0, this.h); backdrop.addColorStop(0, '#193e34'); backdrop.addColorStop(1, '#091f1b'); ctx.fillStyle = backdrop; ctx.fillRect(0, 0, this.w, this.h)
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.38)'; ctx.shadowBlur = 24; ctx.fillStyle = '#4b8f56'; roundedRect(ctx, course.left, course.top, course.width, course.height, 28); ctx.fill(); ctx.restore()
+    ctx.save(); roundedRect(ctx, course.left, course.top, course.width, course.height, 28); ctx.clip()
+    const fairway = ctx.createLinearGradient(course.left, course.top, course.right, course.bottom); fairway.addColorStop(0, '#70c56f'); fairway.addColorStop(.55, '#4eaa5d'); fairway.addColorStop(1, '#34854c'); ctx.fillStyle = fairway; ctx.fillRect(course.left, course.top, course.width, course.height)
+    for (let stripe = 0; stripe < 12; stripe++) { ctx.fillStyle = stripe % 2 ? 'rgba(255,255,210,.045)' : 'rgba(12,79,45,.035)'; ctx.fillRect(course.left, course.top + stripe * course.height / 12, course.width, course.height / 12) }
+    ctx.fillStyle = 'rgba(232,255,205,.13)'; for (let i = 0; i < 60; i++) { const x = course.left + ((i * 83 + this.stageIndex * 29) % Math.max(1, course.width)), y = course.top + ((i * 137 + this.stageIndex * 41) % Math.max(1, course.height)); ctx.fillRect(x, y, 1.3, 3) }
+    this.waters.forEach((water) => {
+      const waterGradient = ctx.createRadialGradient(water.x - water.rx * .25, water.y - water.ry * .3, 2, water.x, water.y, water.rx); waterGradient.addColorStop(0, '#6de3e7'); waterGradient.addColorStop(1, '#168aa4'); ctx.fillStyle = waterGradient; ctx.beginPath(); ctx.ellipse(water.x, water.y, water.rx, water.ry, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.strokeStyle = 'rgba(216,255,255,.55)'; ctx.lineWidth = 1.5; for (let ring = .35; ring < .9; ring += .25) { ctx.beginPath(); ctx.ellipse(water.x, water.y, water.rx * ring, water.ry * ring, 0, 0, Math.PI * 2); ctx.stroke() }
+    })
+    this.bunkers.forEach((bunker) => {
+      ctx.fillStyle = '#e5c982'; ctx.beginPath(); ctx.ellipse(bunker.x, bunker.y, bunker.rx, bunker.ry, -.08, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(117,88,44,.25)'; ctx.lineWidth = 1
+      for (let line = -2; line <= 2; line++) { ctx.beginPath(); ctx.moveTo(bunker.x - bunker.rx * .65, bunker.y + line * 5); ctx.quadraticCurveTo(bunker.x, bunker.y + line * 5 + 5, bunker.x + bunker.rx * .65, bunker.y + line * 5); ctx.stroke() }
+    })
+    this.walls.forEach((wall) => {
+      ctx.fillStyle = 'rgba(13,55,36,.35)'; roundedRect(ctx, wall.x + 3, wall.y + 6, wall.width, wall.height, 6); ctx.fill()
+      const hedge = ctx.createLinearGradient(wall.x, wall.y, wall.x, wall.y + wall.height); hedge.addColorStop(0, '#3d8448'); hedge.addColorStop(1, '#1e6138'); ctx.fillStyle = hedge; roundedRect(ctx, wall.x, wall.y, wall.width, wall.height, 6); ctx.fill(); ctx.strokeStyle = 'rgba(225,255,185,.25)'; ctx.stroke()
+      ctx.fillStyle = 'rgba(190,238,126,.25)'; for (let leaf = 9; leaf < wall.width; leaf += 18) { ctx.beginPath(); ctx.arc(wall.x + leaf, wall.y + 7 + leaf % 5, 2.4, 0, Math.PI * 2); ctx.fill() }
+    })
+    this.bumpers.forEach((bumper) => {
+      ctx.fillStyle = 'rgba(15,46,34,.3)'; ctx.beginPath(); ctx.ellipse(bumper.x + 3, bumper.y + bumper.r * .68, bumper.r * .9, bumper.r * .4, 0, 0, Math.PI * 2); ctx.fill()
+      const rock = ctx.createRadialGradient(bumper.x - bumper.r * .3, bumper.y - bumper.r * .35, 2, bumper.x, bumper.y, bumper.r); rock.addColorStop(0, '#f2c77b'); rock.addColorStop(1, '#a96d44'); ctx.fillStyle = rock; ctx.beginPath(); ctx.arc(bumper.x, bumper.y, bumper.r, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(77,42,30,.35)'; ctx.lineWidth = 2; ctx.stroke()
+    })
+    ctx.fillStyle = 'rgba(11,47,31,.42)'; ctx.beginPath(); ctx.ellipse(this.hole.x + 2, this.hole.y + 3, this.hole.r + 3, this.hole.r * .62, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#102c20'; ctx.beginPath(); ctx.ellipse(this.hole.x, this.hole.y, this.hole.r, this.hole.r * .53, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.65)'; ctx.lineWidth = 2; ctx.stroke()
+    ctx.strokeStyle = '#fff7db'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(this.hole.x, this.hole.y); ctx.lineTo(this.hole.x, this.hole.y - 53); ctx.stroke()
+    ctx.fillStyle = '#ff665d'; ctx.beginPath(); ctx.moveTo(this.hole.x + 1, this.hole.y - 53); ctx.lineTo(this.hole.x + 31, this.hole.y - 43); ctx.lineTo(this.hole.x + 1, this.hole.y - 33); ctx.closePath(); ctx.fill()
+    if (this.dragStart && this.dragPoint) this.drawGolfAim(ctx)
+    const ballRadius = this.ball.r * (1 - this.sinkProgress * .78)
+    if (ballRadius > 1) {
+      ctx.fillStyle = 'rgba(12,38,28,.28)'; ctx.beginPath(); ctx.ellipse(this.ball.x + 3, this.ball.y + 8, ballRadius * 1.05, ballRadius * .46, 0, 0, Math.PI * 2); ctx.fill()
+      const ballGradient = ctx.createRadialGradient(this.ball.x - ballRadius * .35, this.ball.y - ballRadius * .45, 1, this.ball.x, this.ball.y, ballRadius); ballGradient.addColorStop(0, '#fff'); ballGradient.addColorStop(1, '#d7e2d8'); ctx.fillStyle = ballGradient; ctx.shadowColor = 'rgba(0,0,0,.2)'; ctx.shadowBlur = 8; ctx.beginPath(); ctx.arc(this.ball.x, this.ball.y, ballRadius, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0
+      ctx.fillStyle = 'rgba(110,125,116,.28)'; for (const [dx, dy] of [[-3, -2], [3, -3], [0, 3], [-4, 4], [5, 2]]) { ctx.beginPath(); ctx.arc(this.ball.x + dx * ballRadius / 10, this.ball.y + dy * ballRadius / 10, Math.max(.6, ballRadius * .08), 0, Math.PI * 2); ctx.fill() }
+    }
+    ctx.restore()
+    this.drawGolfHud(ctx, definition)
+  }
+  private drawGolfAim(ctx: CanvasRenderingContext2D) {
+    if (!this.dragStart || !this.dragPoint) return
+    const pullX = this.dragStart.x - this.dragPoint.x, pullY = this.dragStart.y - this.dragPoint.y, pullDistance = Math.hypot(pullX, pullY)
+    if (pullDistance < 1) return
+    const power = Math.min(140, pullDistance), nx = pullX / pullDistance, ny = pullY / pullDistance
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(this.ball.x, this.ball.y); ctx.lineTo(this.dragPoint.x, this.dragPoint.y); ctx.stroke()
+    for (let dot = 1; dot <= 9; dot++) { const distance = 17 + dot * (8 + power * .045); ctx.globalAlpha = .25 + dot * .06; ctx.fillStyle = '#fff5a2'; ctx.beginPath(); ctx.arc(this.ball.x + nx * distance, this.ball.y + ny * distance, Math.max(1.4, 3.5 - dot * .18), 0, Math.PI * 2); ctx.fill() } ctx.globalAlpha = 1
+    ctx.fillStyle = 'rgba(8,32,24,.66)'; roundedRect(ctx, this.w * .18, this.h - 65, this.w * .64, 12, 6); ctx.fill()
+    const powerGradient = ctx.createLinearGradient(this.w * .18, 0, this.w * .82, 0); powerGradient.addColorStop(0, '#f7e77f'); powerGradient.addColorStop(.7, '#ffad57'); powerGradient.addColorStop(1, '#ff5b52'); ctx.fillStyle = powerGradient; roundedRect(ctx, this.w * .18, this.h - 65, this.w * .64 * power / 140, 12, 6); ctx.fill()
+  }
+  private drawGolfHud(ctx: CanvasRenderingContext2D, definition: GolfStageDefinition) {
+    ctx.fillStyle = 'rgba(4,24,19,.82)'; ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; roundedRect(ctx, 14, 10, this.w - 28, 56, 16); ctx.fill(); ctx.stroke()
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillStyle = '#a9c8b4'; ctx.font = '800 8px system-ui'; ctx.fillText(`HOLE ${this.stageIndex + 1} / ${GOLF_STAGES.length}`, 29, 26); ctx.fillStyle = '#fff'; ctx.font = '900 16px system-ui'; ctx.fillText(definition.name, 29, 47)
+    ctx.textAlign = 'center'; ctx.fillStyle = '#a9c8b4'; ctx.font = '800 8px system-ui'; ctx.fillText('PAR', this.w * .66, 26); ctx.fillStyle = '#f7df73'; ctx.font = '900 18px system-ui'; ctx.fillText(String(definition.par), this.w * .66, 47)
+    ctx.textAlign = 'right'; ctx.fillStyle = '#a9c8b4'; ctx.font = '800 8px system-ui'; ctx.fillText('TOTAL', this.w - 29, 26); ctx.fillStyle = '#fff'; ctx.font = '900 18px system-ui'; ctx.fillText(`${this.totalStrokes}타`, this.w - 29, 47)
+    ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.72)'; ctx.font = '800 10px system-ui'; ctx.fillText(`현재 홀  ${this.stageStrokes}타`, this.w * .5, this.h - 17)
+    if (this.feedbackLife > 0) { const alpha = Math.min(1, this.feedbackLife * 2), scale = 1 + Math.sin(Math.min(1, (1.4 - this.feedbackLife) * 2) * Math.PI) * .06; ctx.save(); ctx.translate(this.w * .5, 94); ctx.scale(scale, scale); ctx.globalAlpha = alpha; ctx.fillStyle = '#fffbe4'; ctx.shadowColor = '#f7df73'; ctx.shadowBlur = 14; ctx.font = '950 18px system-ui'; ctx.fillText(this.feedback, 0, 0); ctx.restore() }
+    if (!this.dragStart && Math.hypot(this.ball.vx, this.ball.vy) < 7 && this.completeTimer <= 0) { ctx.fillStyle = 'rgba(255,255,255,.72)'; ctx.font = '800 9px system-ui'; ctx.fillText('공을 잡고 뒤로 당겨 샷', this.w * .5, this.h - 49) }
   }
 }
 
