@@ -6,8 +6,13 @@ import type { GameStats, MiniGameModule } from '../games/types'
 import { GameInfoSheet } from '../components/GameInfoSheet/GameInfoSheet'
 import { GamePlayer } from '../components/GamePlayer/GamePlayer'
 import { UpdatePrompt } from '../components/UpdatePrompt/UpdatePrompt'
+import { AppNavigation, type AppTab } from '../components/AppNavigation/AppNavigation'
+import { AuthGate } from '../components/AuthGate/AuthGate'
 import { audioManager } from '../services/audio/AudioManager'
 import { defaultState, loadState, saveState, type PersistedState } from '../services/storage/appStorage'
+import { HomeScreen } from '../social/HomeScreen'
+import { MessagesScreen } from '../social/MessagesScreen'
+import { ProfileScreen } from '../social/ProfileScreen'
 
 export function App() {
   const location = useLocation()
@@ -16,6 +21,7 @@ export function App() {
   const [ready, setReady] = useState(false)
   const [activeGame, setActiveGame] = useState<MiniGameModule | null>(null)
   const [infoGame, setInfoGame] = useState<MiniGameModule | null>(null)
+  const [authReason, setAuthReason] = useState<string | null>(null)
 
   useEffect(() => { void loadState().then((loaded) => { setState(loaded); audioManager.setMuted(loaded.muted); setReady(true) }) }, [])
   useEffect(() => { if (ready) void saveState(state) }, [ready, state])
@@ -28,10 +34,18 @@ export function App() {
   const liked = useMemo(() => new Set(state.liked), [state.liked])
   const bookmarked = useMemo(() => new Set(state.bookmarked), [state.bookmarked])
   const bestScores = useMemo(() => Object.fromEntries(Object.entries(state.stats).map(([id, stats]) => [id, stats.bestScore])), [state.stats])
-  const toggleList = (key: 'liked' | 'bookmarked', id: string) => setState((current) => ({ ...current, [key]: current[key].includes(id) ? current[key].filter((item) => item !== id) : [...current[key], id] }))
   const toggleMute = () => setState((current) => { const muted = !current.muted; audioManager.setMuted(muted); if (!muted) audioManager.unlock(); return { ...current, muted } })
   const openGame = (game: MiniGameModule) => { setInfoGame(null); setActiveGame(game); audioManager.unlock(); navigate(`/game/${game.slug}`) }
-  const closeGame = useCallback(() => navigate('/'), [navigate])
+  const closeGame = useCallback(() => navigate('/explore'), [navigate])
+
+  const activeTab: AppTab = location.pathname.startsWith('/messages') ? 'messages'
+    : location.pathname.startsWith('/profile') ? 'profile'
+      : location.pathname.startsWith('/explore') || location.pathname.startsWith('/game/') ? 'explore'
+        : 'home'
+  const changeTab = (tab: AppTab) => {
+    setInfoGame(null)
+    navigate(tab === 'home' ? '/' : `/${tab}`)
+  }
 
   const recordResult = (game: MiniGameModule, score: number, elapsedMs: number) => {
     setState((current) => {
@@ -47,14 +61,19 @@ export function App() {
   }
 
   return (
-    <div className={`app-shell ${activeGame ? 'game-is-open' : ''}`} data-ready={ready}>
-      <GameFeed
-        games={gameRegistry} ready={ready} currentIndex={state.feedIndex} liked={liked} bookmarked={bookmarked} muted={state.muted} bestScores={bestScores}
-        onIndexChange={(feedIndex) => setState((current) => ({ ...current, feedIndex }))}
-        onPlay={openGame} onInfo={setInfoGame} onLike={(id) => toggleList('liked', id)} onBookmark={(id) => toggleList('bookmarked', id)} onShare={(game) => void share(game)} onToggleMute={toggleMute}
-      />
+    <div className={`app-shell tab-${activeTab} ${activeGame ? 'game-is-open' : ''}`} data-ready={ready}>
+      {activeTab === 'home' && <HomeScreen onPlay={openGame} onExplore={() => changeTab('explore')} onRequireAuth={setAuthReason} onShare={(game) => void share(game)} />}
+      {activeTab === 'explore' && <GameFeed
+          games={gameRegistry} ready={ready} currentIndex={state.feedIndex} liked={liked} bookmarked={bookmarked} muted={state.muted} bestScores={bestScores}
+          onIndexChange={(feedIndex) => setState((current) => ({ ...current, feedIndex }))}
+          onPlay={openGame} onInfo={setInfoGame} onLike={() => setAuthReason('좋아요')} onBookmark={() => setAuthReason('게임 저장')} onShare={(game) => void share(game)} onToggleMute={toggleMute}
+        />}
+      {activeTab === 'messages' && <MessagesScreen onRequireAuth={setAuthReason} />}
+      {activeTab === 'profile' && <ProfileScreen stats={state.stats} bookmarked={bookmarked} onRequireAuth={setAuthReason} />}
+      {!activeGame && <AppNavigation activeTab={activeTab} onChange={changeTab} />}
       {activeGame && <GamePlayer game={activeGame} bestScore={bestScores[activeGame.id] ?? 0} muted={state.muted} onBack={closeGame} onToggleMute={toggleMute} onFinish={(score, elapsed) => recordResult(activeGame, score, elapsed)} onShare={() => void share(activeGame)} />}
       <GameInfoSheet game={infoGame} bestScore={infoGame ? bestScores[infoGame.id] ?? 0 : 0} onClose={() => setInfoGame(null)} onPlay={openGame} />
+      <AuthGate reason={authReason} onClose={() => setAuthReason(null)} />
       <UpdatePrompt />
     </div>
   )
