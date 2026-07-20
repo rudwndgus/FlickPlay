@@ -1,4 +1,5 @@
 export const AXEBOUND_WORLD_WIDTH = 720
+export const AXEBOUND_SECTION_HEIGHT = 1440
 export const AXEBOUND_WORLD_HEIGHT = 8640
 export const AXEBOUND_FLOOR_Y = 8520
 export const AXEBOUND_SUMMIT_Y = 100

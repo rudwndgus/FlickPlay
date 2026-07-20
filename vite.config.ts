@@ -28,6 +28,12 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        globIgnores: ['assets/games/axebound/maps/*.png'],
+        runtimeCaching: [{
+          urlPattern: /\/assets\/games\/axebound\/maps\/map-\d+\.png$/,
+          handler: 'CacheFirst',
+          options: { cacheName: 'axebound-original-maps', expiration: { maxEntries: 6, maxAgeSeconds: 60 * 60 * 24 * 30 } },
+        }],
         cleanupOutdatedCaches: true
       },
       devOptions: { enabled: false }

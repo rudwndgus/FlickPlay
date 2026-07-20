@@ -2,6 +2,7 @@ import type { ControllerOptions, GameController, GameStatus, GameTheme } from '.
 import {
   AXEBOUND_FLOOR_Y,
   AXEBOUND_LEVEL_OBJECTS,
+  AXEBOUND_SECTION_HEIGHT,
   AXEBOUND_SUMMIT_Y,
   AXEBOUND_WORLD_HEIGHT,
   AXEBOUND_WORLD_WIDTH,
@@ -27,6 +28,8 @@ const MIN_THROW_SPEED = 430
 const MAX_THROW_SPEED = 1080
 const MIN_STICK_SPEED = 125
 const MAX_STICK_SPEED = 1420
+const DRAW_COLLISION_DEBUG = false
+const MAP_IMAGE_COUNT = 6
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const length = (point: AxeBoundPoint) => Math.hypot(point.x, point.y)
@@ -175,9 +178,10 @@ export class AxeBoundController implements GameController {
   private particles: Particle[] = []
   private objectById = new Map(AXEBOUND_LEVEL_OBJECTS.map((object) => [object.id, object]))
   private axeSprite: HTMLImageElement | null = null
+  private mapSprites: HTMLImageElement[] = []
   private launchIgnoreId: string | null = null
   private launchIgnoreTimer = 0
-  axe = { state: 'ready' as AxeState, x: 142.5, y: 8440, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor' as string | null, stuckLocal: { x: 0, y: -45 }, stuckTime: 0 }
+  axe = { state: 'ready' as AxeState, x: 142.5, y: 8440, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor' as string | null, stuckLocal: { x: 0, y: -45 }, stuckNormal: { x: 0, y: -1 }, stuckTime: 0 }
   aimStart: AxeBoundPoint | null = null
   aimCurrent: AxeBoundPoint | null = null
   falls = 0
@@ -186,6 +190,9 @@ export class AxeBoundController implements GameController {
   constructor(private readonly theme: GameTheme, private readonly options: ControllerOptions) {
     if (typeof Image !== 'undefined') {
       this.axeSprite = new Image(); this.axeSprite.decoding = 'async'; this.axeSprite.src = `${import.meta.env.BASE_URL}assets/games/axebound/axe.png`
+      this.mapSprites = Array.from({ length: MAP_IMAGE_COUNT }, (_, index) => {
+        const image = new Image(); image.decoding = 'async'; image.src = `${import.meta.env.BASE_URL}assets/games/axebound/maps/map-${String(index + 1).padStart(2, '0')}.png`; return image
+      })
     }
     this.reset()
   }
@@ -223,7 +230,7 @@ export class AxeBoundController implements GameController {
   }
 
   pointerDown(x: number, y: number) {
-    if (this.status === 'finished' || this.clear || this.aimStart) return
+    if (this.status === 'finished' || this.clear || this.aimStart || (this.axe.state !== 'ready' && this.axe.state !== 'stuck')) return
     this.aimStart = { x, y }; this.aimCurrent = { x, y }
   }
   pointerMove(x: number, y: number) { if (this.aimStart) this.aimCurrent = { x, y } }
@@ -232,17 +239,21 @@ export class AxeBoundController implements GameController {
     this.aimCurrent = { x, y }
     const pull = { x: this.aimStart.x - x, y: this.aimStart.y - y }, dragLength = length(pull)
     this.aimStart = null; this.aimCurrent = null
-    if (dragLength < MIN_DRAG) return
+    if (dragLength < MIN_DRAG || (this.axe.state !== 'ready' && this.axe.state !== 'stuck')) return
     this.throwAxe(normalize(pull), clamp(dragLength / MAX_DRAG, 0, 1))
   }
-  swipe(dx: number, dy: number) { if (length({ x: dx, y: dy }) >= MIN_DRAG) this.throwAxe(normalize({ x: dx, y: dy }), clamp(length({ x: dx, y: dy }) / 160, 0, 1)) }
+  swipe(dx: number, dy: number) { if ((this.axe.state === 'ready' || this.axe.state === 'stuck') && length({ x: dx, y: dy }) >= MIN_DRAG) this.throwAxe(normalize({ x: dx, y: dy }), clamp(length({ x: dx, y: dy }) / 160, 0, 1)) }
 
   private throwAxe(direction: AxeBoundPoint, power: number) {
+    if (this.axe.state !== 'ready' && this.axe.state !== 'stuck') return
     const speed = MIN_THROW_SPEED + (MAX_THROW_SPEED - MIN_THROW_SPEED) * power
     const inheritedVelocity = { x: this.axe.vx, y: this.axe.vy }
-    this.launchIgnoreId = this.axe.stuckObjectId; this.launchIgnoreTimer = .09
+    const releaseNormal = this.axe.stuckNormal
+    const movingAwayFromSurface = Boolean(this.axe.stuckObjectId && dot(direction, releaseNormal) > .18)
+    this.launchIgnoreId = movingAwayFromSurface ? this.axe.stuckObjectId : null; this.launchIgnoreTimer = movingAwayFromSurface ? .055 : 0
     this.axe.state = 'flying'; this.axe.stuckObjectId = null; this.axe.flightTime = 0; this.axe.stuckTime = 0
-    this.axe.x += direction.x * 4; this.axe.y += direction.y * 4
+    if (movingAwayFromSurface) { this.axe.x += releaseNormal.x * 5; this.axe.y += releaseNormal.y * 5 }
+    this.axe.x += direction.x * 2; this.axe.y += direction.y * 2
     this.axe.vx = inheritedVelocity.x * .12 + direction.x * speed; this.axe.vy = inheritedVelocity.y * .12 + direction.y * speed
     this.axe.angle = Math.atan2(direction.y, direction.x); this.axe.angularVelocity = 2.2 + power * 2.2
     this.throws += 1; this.options.onImpact('tap')
@@ -269,6 +280,7 @@ export class AxeBoundController implements GameController {
     this.axe.x += contact.normal.x * Math.max(0, contact.penetration - 1); this.axe.y += contact.normal.y * Math.max(0, contact.penetration - 1)
     this.axe.state = 'stuck'; this.axe.vx = 0; this.axe.vy = 0; this.axe.angularVelocity = 0; this.axe.stuckObjectId = contact.object.id
     this.axe.stuckLocal = toLocal({ x: this.axe.x, y: this.axe.y }, contact.transform)
+    this.axe.stuckNormal = contact.normal
     this.axe.stuckTime = 0
     const blade = { x: this.axe.x + Math.cos(this.axe.angle) * AXE_BLADE_OFFSET, y: this.axe.y + Math.sin(this.axe.angle) * AXE_BLADE_OFFSET }
     this.triggerFallingObject(contact.object); this.spawnImpact(blade.x, blade.y, contact.object.material, true); this.shake = .7; this.options.onImpact('perfect')
@@ -284,7 +296,7 @@ export class AxeBoundController implements GameController {
 
   private settleAxe(contact: Contact) {
     this.axe.state = 'ready'; this.axe.vx = contact.transform.vx; this.axe.vy = contact.transform.vy; this.axe.angularVelocity = 0; this.axe.stuckObjectId = contact.object.id
-    this.axe.stuckLocal = toLocal({ x: this.axe.x, y: this.axe.y }, contact.transform); this.axe.stuckTime = 0
+    this.axe.stuckLocal = toLocal({ x: this.axe.x, y: this.axe.y }, contact.transform); this.axe.stuckNormal = contact.normal; this.axe.stuckTime = 0
   }
 
   private updateAnchoredAxe(dt: number) {
@@ -296,7 +308,7 @@ export class AxeBoundController implements GameController {
 
   private resetAxeAtFloor(countFall: boolean) {
     if (countFall) { this.falls += 1; this.fallArmed = false }
-    this.axe = { state: 'ready', x: 142.5, y: 8440, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor', stuckLocal: { x: 0, y: -45 }, stuckTime: 0 }
+    this.axe = { state: 'ready', x: 142.5, y: 8440, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor', stuckLocal: { x: 0, y: -45 }, stuckNormal: { x: 0, y: -1 }, stuckTime: 0 }
   }
 
   private findPointContact(point: AxeBoundPoint, radius: number) {
@@ -335,6 +347,7 @@ export class AxeBoundController implements GameController {
     this.clear = true; this.score = 1000; this.options.onScore(this.score); this.options.onImpact('perfect')
     if (this.options.preview) { this.reset(); return }
     this.clearTimer = 0; this.axe.state = 'stuck'; this.axe.stuckObjectId = goal.id; this.axe.x = goalTransform.x; this.axe.y = goalTransform.y; this.axe.stuckLocal = { x: 0, y: 0 }
+    this.axe.stuckNormal = { x: 0, y: -1 }
   }
 
   private updateCamera(dt: number) {
@@ -366,8 +379,7 @@ export class AxeBoundController implements GameController {
     this.drawBackdrop(ctx)
     ctx.save()
     if (this.shake > 0) ctx.translate(Math.sin(this.elapsed * 90) * this.shake * 3, Math.cos(this.elapsed * 77) * this.shake * 2)
-    this.drawMapDecorations(ctx)
-    for (const object of AXEBOUND_LEVEL_OBJECTS) this.drawObject(ctx, object)
+    if (DRAW_COLLISION_DEBUG) { this.drawMapDecorations(ctx); for (const object of AXEBOUND_LEVEL_OBJECTS) this.drawObject(ctx, object) }
     this.drawParticles(ctx); this.drawAxe(ctx); this.drawAim(ctx)
     ctx.restore()
     this.drawHud(ctx)
@@ -387,6 +399,17 @@ export class AxeBoundController implements GameController {
     }
     const shaft = ctx.createRadialGradient(this.w * .5, this.h * .48, this.w * .08, this.w * .5, this.h * .48, this.w * .58)
     shaft.addColorStop(0, 'rgba(0,0,0,.02)'); shaft.addColorStop(.62, 'rgba(5,0,12,.15)'); shaft.addColorStop(1, 'rgba(0,0,0,.78)'); ctx.fillStyle = shaft; ctx.fillRect(0, 0, this.w, this.h)
+    ctx.save(); ctx.imageSmoothingEnabled = false
+    for (let imageIndex = 0; imageIndex < this.mapSprites.length; imageIndex++) {
+      const image = this.mapSprites[imageIndex]
+      if (!image.complete || image.naturalWidth === 0) continue
+      const worldTop = (MAP_IMAGE_COUNT - 1 - imageIndex) * AXEBOUND_SECTION_HEIGHT
+      const screenTop = (worldTop - this.cameraY) * this.scale
+      const screenHeight = AXEBOUND_SECTION_HEIGHT * this.scale + 1
+      if (screenTop > this.h || screenTop + screenHeight < 0) continue
+      ctx.drawImage(image, 0, screenTop, this.w, screenHeight)
+    }
+    ctx.restore()
   }
 
   private drawMapDecorations(ctx: CanvasRenderingContext2D) {
@@ -537,7 +560,7 @@ export class AxeBoundController implements GameController {
   resume() { this.paused = false; if (this.status === 'paused') this.status = 'playing' }
   restart() { this.score = 0; this.elapsed = 0; this.paused = false; this.status = 'playing'; this.reset() }
   reset() {
-    this.axe = { state: 'ready', x: 142.5, y: 8440, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor', stuckLocal: { x: 0, y: -45 }, stuckTime: 0 }
+    this.axe = { state: 'ready', x: 142.5, y: 8440, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor', stuckLocal: { x: 0, y: -45 }, stuckNormal: { x: 0, y: -1 }, stuckTime: 0 }
     this.cameraY = clamp(AXEBOUND_FLOOR_Y - this.viewWorldHeight * .86, 0, AXEBOUND_WORLD_HEIGHT - this.viewWorldHeight); this.highestY = AXEBOUND_FLOOR_Y; this.aimStart = null; this.aimCurrent = null; this.falls = 0; this.throws = 0; this.fallArmed = true; this.shake = 0; this.autoClock = 0; this.clear = false; this.clearTimer = 0; this.fallingObjects.clear(); this.particles = []
   }
   destroy() { this.paused = true; this.particles = [] }

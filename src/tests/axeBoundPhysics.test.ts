@@ -83,16 +83,42 @@ describe('AXEBOUND physics', () => {
     expect(sprite.src).toContain('/assets/games/axebound/axe.png')
   })
 
-  it('re-aims the same axe in midair instead of spawning another object', () => {
+  it('loads the six supplied PNG maps unchanged in their original order', () => {
+    const { controller } = makeController()
+    const maps = (controller as unknown as { mapSprites: HTMLImageElement[] }).mapSprites
+
+    expect(maps).toHaveLength(6)
+    maps.forEach((map, index) => expect(map.src).toContain(`/assets/games/axebound/maps/map-${String(index + 1).padStart(2, '0')}.png`))
+  })
+
+  it('allows only one throw and ignores every aim gesture while the axe is airborne', () => {
     const { controller } = makeController()
     controller.axe.state = 'flying'; controller.axe.stuckObjectId = null
     controller.axe.x = 220; controller.axe.y = 540; controller.axe.vx = 180; controller.axe.vy = 260
     controller.pointerDown(40, 120); controller.pointerUp(40, 240)
 
     expect(controller.axe.x).toBe(220)
-    expect(controller.axe.y).toBeLessThan(540)
-    expect(controller.axe.vy).toBeLessThan(0)
-    expect(controller.throws).toBe(1)
+    expect(controller.axe.y).toBe(540)
+    expect(controller.axe.vx).toBe(180)
+    expect(controller.axe.vy).toBe(260)
+    expect(controller.aimStart).toBeNull()
+    expect(controller.throws).toBe(0)
+  })
+
+  it('collides with the attached platform instead of passing through when launched into it', () => {
+    const { controller } = makeController()
+    controller.axe.state = 'flying'; controller.axe.x = 197.5; controller.axe.y = 6475
+    controller.axe.vx = 0; controller.axe.vy = -500; controller.axe.angle = -Math.PI / 2; controller.axe.angularVelocity = 0; controller.axe.flightTime = 0
+    controller.update(.04)
+    expect(controller.axe.state).toBe('stuck')
+
+    controller.pointerDown(300, 300); controller.pointerUp(300, 420)
+    expect((controller as unknown as { launchIgnoreId: string | null }).launchIgnoreId).toBeNull()
+    for (let index = 0; index < 8; index++) controller.update(.01)
+
+    expect(controller.axe.y).toBeGreaterThan(6435)
+    expect(controller.axe.state).toBe('stuck')
+    expect(controller.axe.stuckObjectId).toBe('s2-left-02')
   })
 
   it('never ends the run because the axe falls onto lower terrain', () => {
