@@ -1,7 +1,8 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { gameRegistry } from '../games/registry'
-import { getVisibleFeedIndex } from '../feed/feedIndex'
+import { getLoopedGameIndex, getVisibleFeedIndex, normalizeLoopScroll } from '../feed/feedIndex'
+import { GameFeed } from '../feed/GameFeed'
 import { GameFeedItem } from '../feed/GameFeedItem'
 
 vi.mock('../components/GameCanvas/GameCanvas', () => ({
@@ -21,6 +22,28 @@ describe('game feed preview preloading', () => {
     expect(getVisibleFeedIndex(399, 800, 8)).toBe(0)
     expect(getVisibleFeedIndex(401, 800, 8)).toBe(1)
     expect(getVisibleFeedIndex(99999, 800, 8)).toBe(7)
+  })
+
+  it('recycles feed sections without changing the visible game', () => {
+    const height = 800
+    const gameCount = 8
+
+    expect(normalizeLoopScroll(16 * height, height, gameCount)).toBe(8 * height)
+    expect(normalizeLoopScroll(8 * height - 1, height, gameCount)).toBe(16 * height - 1)
+    expect(getLoopedGameIndex(16, gameCount)).toBe(0)
+    expect(getLoopedGameIndex(7, gameCount)).toBe(7)
+  })
+
+  it('keeps a fixed three-section loop and only prepares nearby previews', () => {
+    const { container } = render(
+      <GameFeed
+        games={gameRegistry} ready={false} currentIndex={0} liked={new Set()} bookmarked={new Set()}
+        muted bestScores={{}} onIndexChange={vi.fn()} {...callbacks}
+      />,
+    )
+
+    expect(container.querySelectorAll('.feed-item')).toHaveLength(gameRegistry.length * 3)
+    expect(screen.getAllByTestId('preview-canvas')).toHaveLength(6)
   })
 
   it('mounts an adjacent preview in a paused ready state and resumes it when current', () => {
