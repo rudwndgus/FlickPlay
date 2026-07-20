@@ -6,6 +6,7 @@ type LoopController = GameController & {
   ball: { x: number; y: number; vx: number; vy: number; r: number; kick: number; collisionCooldown: number }
   target: { side: -1 | 1; x: number; y: number; pulse: number; netPunch: number }
   timeLeft: number
+  buzzerActive: boolean
   cleanStreak: number
   rimHits: number
   touchedSurface: boolean
@@ -152,13 +153,47 @@ describe('Loop Hoops physics', () => {
     expect(controller.touchedSurface).toBe(false)
   })
 
-  it('ends only when the timer is depleted', () => {
+  it('starts the buzzer at zero, blocks new taps, and ends only when the ball reaches the floor', () => {
     const { controller, onFinish } = makeController()
-    controller.timeLeft = .0001
+    controller.timeLeft = .0001; controller.ball.y = 300; controller.ball.vy = -240
     controller.update(.03)
 
+    expect(controller.buzzerActive).toBe(true)
+    expect(controller.timeLeft).toBe(0)
+    expect(controller.getStatus()).toBe('playing')
+    expect(onFinish).not.toHaveBeenCalled()
+
+    const velocityAfterBuzzer = { vx: controller.ball.vx, vy: controller.ball.vy }
+    controller.pointerDown(0, 0)
+    expect(controller.ball.vx).toBe(velocityAfterBuzzer.vx)
+    expect(controller.ball.vy).toBe(velocityAfterBuzzer.vy)
+
+    controller.ball.y = 844 - 74 - controller.ball.r + 2; controller.ball.vy = 600
+    controller.update(.01)
     expect(controller.getStatus()).toBe('finished')
     expect(onFinish).toHaveBeenCalledWith(0)
+  })
+
+  it('counts a buzzer beater without refilling time, then waits for the floor', () => {
+    const { controller, onScore, onFinish } = makeController()
+    const previousSide = controller.target.side
+    controller.timeLeft = .0001
+    controller.ball.x = controller.target.x; controller.ball.y = controller.target.y - 8
+    controller.ball.vx = 0; controller.ball.vy = 500
+    controller.update(.03)
+
+    expect(controller.buzzerActive).toBe(true)
+    expect(controller.getStatus()).toBe('playing')
+    expect(controller.getScore()).toBe(1)
+    expect(controller.timeLeft).toBe(0)
+    expect(controller.target.side).toBe(previousSide)
+    expect(controller.scoreEffect.label).toBe('BUZZER BEATER!  +1')
+    expect(onScore).toHaveBeenCalledWith(1)
+    expect(onFinish).not.toHaveBeenCalled()
+
+    controller.ball.y = 844 - 74 - controller.ball.r + 2; controller.ball.vy = 600
+    controller.update(.01)
+    expect(onFinish).toHaveBeenCalledWith(1)
   })
 
   it('refills time and moves the hoop to the opposite side after scoring', () => {

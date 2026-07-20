@@ -585,6 +585,7 @@ class LoopHoopsController extends BaseController {
   private ball = { x: 240, y: 530, vx: -175, vy: -80, r: 18, rotation: 0, kick: 0, collisionCooldown: 0 }
   private target = { side: -1 as -1 | 1, x: 82, y: 330, pulse: 0, netPunch: 0 }
   private timeLeft = 1
+  private buzzerActive = false
   private cleanStreak = 0
   private rimHits = 0
   private touchedSurface = false
@@ -602,7 +603,7 @@ class LoopHoopsController extends BaseController {
   reset() {
     this.ball = { x: this.w * .62, y: this.h * .63, vx: -175, vy: -80, r: 18, rotation: 0, kick: 0, collisionCooldown: 0 }
     this.target = { side: -1, x: this.sideHoopAnchorX(-1), y: this.h * .4, pulse: 0, netPunch: 0 }
-    this.timeLeft = 1; this.cleanStreak = 0; this.rimHits = 0; this.touchedSurface = false; this.wrapGraceSide = null; this.wrapApproachSide = null; this.autoClock = 0; this.trail = []; this.scoreEffect = { x: 0, y: 0, life: 0, label: '', points: 0, clean: false, streak: 0 }
+    this.timeLeft = 1; this.buzzerActive = false; this.cleanStreak = 0; this.rimHits = 0; this.touchedSurface = false; this.wrapGraceSide = null; this.wrapApproachSide = null; this.autoClock = 0; this.trail = []; this.scoreEffect = { x: 0, y: 0, life: 0, label: '', points: 0, clean: false, streak: 0 }
   }
   constructor(theme: GameTheme, options: ControllerOptions) {
     super(theme, options)
@@ -611,7 +612,7 @@ class LoopHoopsController extends BaseController {
     this.reset()
   }
   pointerDown() {
-    if (this.status === 'finished') return
+    if (this.status === 'finished' || this.buzzerActive) return
     this.ball.vy = -570
     this.ball.vx = this.target.side * Math.min(245, 175 + this.score * 2.5)
     this.ball.kick = 1
@@ -620,9 +621,11 @@ class LoopHoopsController extends BaseController {
   autopilot() { if (this.ball.y > this.target.y + 24 || this.ball.vy > 230) this.pointerDown() }
   tick(dt: number) {
     if (this.options.preview) { this.autoClock += dt; if (this.autoClock > .38) { this.autoClock = 0; this.autopilot() } }
-    const drainRate = Math.min(.32, .078 + this.elapsed * .0017 + this.score * .009)
-    this.timeLeft = Math.max(0, this.timeLeft - drainRate * dt)
-    if (this.timeLeft <= 0) { this.finish(); return }
+    if (!this.buzzerActive) {
+      const drainRate = Math.min(.32, .078 + this.elapsed * .0017 + this.score * .009)
+      this.timeLeft = Math.max(0, this.timeLeft - drainRate * dt)
+      if (this.timeLeft <= 0) this.buzzerActive = true
+    }
 
     this.ball.rotation += dt * (4 + Math.abs(this.ball.vx) * .012)
     this.ball.kick = Math.max(0, this.ball.kick - dt * 7.5)
@@ -647,7 +650,9 @@ class LoopHoopsController extends BaseController {
     const ceiling = LOOP_TIMER_TOP + LOOP_TIMER_HEIGHT + this.ball.r, floor = this.h - 74 - this.ball.r
     if (this.ball.y < ceiling) { this.ball.y = ceiling; this.ball.vy = Math.abs(this.ball.vy) * .72; this.touchedSurface = true; this.cleanStreak = 0 }
     if (this.ball.y > floor) {
-      this.ball.y = floor; this.ball.vy = -Math.max(350, Math.abs(this.ball.vy) * .72); this.ball.kick = .55; this.touchedSurface = true; this.cleanStreak = 0; this.options.onImpact('tap')
+      this.ball.y = floor
+      if (this.buzzerActive) { this.finish(); return }
+      this.ball.vy = -Math.max(350, Math.abs(this.ball.vy) * .72); this.ball.kick = .55; this.touchedSurface = true; this.cleanStreak = 0; this.options.onImpact('tap')
     }
 
     const emergingPastBoundaryHardware = this.wrapGraceSide === this.target.side
@@ -677,12 +682,14 @@ class LoopHoopsController extends BaseController {
   }
   private scoreGoal() {
     const scoredAt = { x: this.target.x, y: this.target.y }
+    const buzzerBeater = this.buzzerActive
     const clean = this.rimHits === 0 && !this.touchedSurface
     this.cleanStreak = clean ? this.cleanStreak + 1 : 0
     const points = clean ? Math.min(MAX_CLEAN_COMBO, this.cleanStreak) : 1
     this.setScore(this.score + points); this.options.onImpact(clean ? 'perfect' : 'score')
-    this.scoreEffect = { ...scoredAt, life: 1, label: clean ? (this.cleanStreak >= FIRE_STREAK ? `FIRE ×${this.cleanStreak}  +${points}` : this.cleanStreak === 2 ? 'PERFECT ×2  +2' : 'CLEAN!  +1') : 'SCORE!  +1', points, clean, streak: this.cleanStreak }
-    this.timeLeft = 1
+    this.scoreEffect = { ...scoredAt, life: 1, label: buzzerBeater ? `BUZZER BEATER!  +${points}` : clean ? (this.cleanStreak >= FIRE_STREAK ? `FIRE ×${this.cleanStreak}  +${points}` : this.cleanStreak === 2 ? 'PERFECT ×2  +2' : 'CLEAN!  +1') : 'SCORE!  +1', points, clean, streak: this.cleanStreak }
+    if (!buzzerBeater) this.timeLeft = 1
+    else { this.target.pulse = 1; this.target.netPunch = 1; return }
     this.target.side = this.target.side === -1 ? 1 : -1
     this.target.x = this.sideHoopAnchorX(this.target.side)
     this.target.y = random(this.h * .27, this.h * .55)

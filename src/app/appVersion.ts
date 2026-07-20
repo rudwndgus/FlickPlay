@@ -1,8 +1,8 @@
-export const APP_VERSION = '0.4.4'
+export const APP_VERSION = '0.4.5'
 
 export const UPDATE_INFO = {
-  title: 'Loop Hoops의 투명 천장을 없앴어요',
-  description: '공이 보이지 않는 예전 충돌선에 막히지 않고 화면 위까지 올라가며, 이제 보이는 타이머 하단이 실제 천장 역할을 합니다.',
+  title: 'Loop Hoops에 버저비터가 생겼어요',
+  description: '타이머가 끝나면 새 터치만 잠기고 이미 날아간 공은 계속 움직입니다. 마지막 공이 바닥에 닿을 때까지 골을 노릴 수 있습니다.',
   addedGames: ['hoop-flight', 'dunk-climb', 'loop-hoops', 'crossing-rush', 'neon-escape', 'perfect-stack', 'pin-core', 'pocket-golf'],
-  changes: ['기존 104px 투명 천장 제거', '타이머 하단 35px과 공 반지름을 실제 충돌선으로 일치', '타이머 이전 구간의 자유로운 상승 회귀 테스트 추가'],
+  changes: ['타이머 0초 이후 터치 차단', '버저 이후 공의 물리·골 판정 유지', '버저비터 득점 후 타이머 재충전 없이 바닥 접촉 시 종료'],
 } as const
