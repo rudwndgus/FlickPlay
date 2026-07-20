@@ -8,7 +8,8 @@
   --safe-top: max(18px, env(safe-area-inset-top));
   --safe-bottom: max(18px, env(safe-area-inset-bottom));
   --game-header-space: calc(var(--safe-top) + 58px);
-  --app-nav-height: calc(62px + var(--safe-bottom));
+  --app-nav-safe: max(5px, env(safe-area-inset-bottom));
+  --app-nav-height: calc(48px + var(--app-nav-safe));
 }
 
 * { box-sizing: border-box; }
@@ -110,11 +111,11 @@ button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 .update-toast .icon-button { width: 30px; height: 30px; flex-basis: 30px; }
 
 /* Social app shell */
-.app-navigation { position: absolute; z-index: 18; left: 0; right: 0; bottom: 0; height: var(--app-nav-height); padding: 7px 10px var(--safe-bottom); display: grid; grid-template-columns: repeat(4, 1fr); align-items: start; background: rgba(12,13,18,.94); border-top: 1px solid rgba(255,255,255,.1); backdrop-filter: blur(22px); box-shadow: 0 -14px 35px rgba(0,0,0,.2); }
-.app-navigation button { min-width: 0; height: 51px; padding: 3px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #777b87; background: transparent; transition: color .18s ease, transform .18s ease; }
+.app-navigation { position: absolute; z-index: 18; left: 0; right: 0; bottom: 0; height: var(--app-nav-height); padding: 2px 8px var(--app-nav-safe); display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; background: rgba(12,13,18,.94); border-top: 1px solid rgba(255,255,255,.1); backdrop-filter: blur(22px); box-shadow: 0 -10px 28px rgba(0,0,0,.18); }
+.app-navigation button { min-width: 0; height: 44px; padding: 1px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; color: #777b87; background: transparent; transition: color .18s ease, transform .18s ease; }
 .app-navigation button:active { transform: scale(.9); }
-.app-navigation button span { width: 34px; height: 29px; display: grid; place-items: center; border-radius: 11px; }
-.app-navigation button small { font-size: 9px; font-weight: 750; }
+.app-navigation button span { width: 32px; height: 27px; display: grid; place-items: center; border-radius: 10px; }
+.app-navigation button small { font-size: 8px; line-height: 11px; font-weight: 750; }
 .app-navigation button.is-active { color: #fff; }
 .app-navigation button.is-active span { color: #14150f; background: #f4ed64; box-shadow: 0 4px 18px rgba(244,237,100,.2); }
 
