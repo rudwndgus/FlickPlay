@@ -578,6 +578,9 @@ class DunkClimbController extends BaseController {
   }
 }
 
+const LOOP_TIMER_TOP = 10
+const LOOP_TIMER_HEIGHT = 25
+
 class LoopHoopsController extends BaseController {
   private ball = { x: 240, y: 530, vx: -175, vy: -80, r: 18, rotation: 0, kick: 0, collisionCooldown: 0 }
   private target = { side: -1 as -1 | 1, x: 82, y: 330, pulse: 0, netPunch: 0 }
@@ -641,7 +644,7 @@ class LoopHoopsController extends BaseController {
     this.ball.y += this.ball.vy * dt
     const wrapped = this.wrapAcrossSideEdges()
     if (!wrapped) { this.beginWrapApproachBeforeHardware(); this.clearWrapApproachAfterHardware(); this.clearWrapGraceAfterHardware() }
-    const ceiling = 104 + this.ball.r, floor = this.h - 74 - this.ball.r
+    const ceiling = LOOP_TIMER_TOP + LOOP_TIMER_HEIGHT + this.ball.r, floor = this.h - 74 - this.ball.r
     if (this.ball.y < ceiling) { this.ball.y = ceiling; this.ball.vy = Math.abs(this.ball.vy) * .72; this.touchedSurface = true; this.cleanStreak = 0 }
     if (this.ball.y > floor) {
       this.ball.y = floor; this.ball.vy = -Math.max(350, Math.abs(this.ball.vy) * .72); this.ball.kick = .55; this.touchedSurface = true; this.cleanStreak = 0; this.options.onImpact('tap')
@@ -870,7 +873,7 @@ class LoopHoopsController extends BaseController {
     this.options.onImpact('tap')
   }
   private drawTimer(ctx: CanvasRenderingContext2D) {
-    const x = 58, y = 10, width = this.w - 116, height = 25
+    const x = 58, y = LOOP_TIMER_TOP, width = this.w - 116, height = LOOP_TIMER_HEIGHT
     ctx.fillStyle = 'rgba(13,13,14,.72)'; ctx.fillRect(x, y, width, height)
     const color = this.timeLeft > .28 ? '#18e9ed' : '#ff3f63'
     ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = this.timeLeft < .3 ? 16 : 8; ctx.fillRect(x, y, width * this.timeLeft, height); ctx.shadowBlur = 0

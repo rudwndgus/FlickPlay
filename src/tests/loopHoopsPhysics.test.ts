@@ -37,6 +37,24 @@ describe('Loop Hoops physics', () => {
     expect(controller.ball.kick).toBe(1)
   })
 
+  it('lets the ball rise freely until the visible timer becomes the ceiling', () => {
+    const { controller } = makeController()
+    controller.ball.y = 90; controller.ball.vy = -100
+    controller.update(.01)
+
+    expect(controller.ball.y).toBeLessThan(90)
+    expect(controller.ball.vy).toBeLessThan(0)
+
+    const timerBottom = 10 + 25
+    controller.ball.y = timerBottom + controller.ball.r + 1
+    controller.ball.vy = -500
+    controller.update(.01)
+
+    expect(controller.ball.y).toBeGreaterThanOrEqual(timerBottom + controller.ball.r)
+    expect(controller.ball.y).toBeLessThan(timerBottom + controller.ball.r + 3)
+    expect(controller.ball.vy).toBeGreaterThan(0)
+  })
+
   it('bounces off the floor without ending the game', () => {
     const { controller, onFinish } = makeController()
     controller.ball.y = 844 - 74 - controller.ball.r + 3
