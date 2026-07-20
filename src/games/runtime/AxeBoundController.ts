@@ -12,13 +12,12 @@ import {
   type AxeBoundPoint,
 } from './axeBoundLevel'
 
-type AxeState = 'held' | 'flying' | 'stuck' | 'bouncing' | 'returning'
+type AxeState = 'ready' | 'flying' | 'stuck' | 'bouncing'
 type Transform = { x: number; y: number; rotation: number; vx: number; vy: number }
 type Contact = { object: AxeBoundLevelObject; transform: Transform; normal: AxeBoundPoint; penetration: number }
 type Particle = AxeBoundPoint & { vx: number; vy: number; life: number; color: string; size: number }
 
 const MAX_STEP = 1 / 120
-const PLAYER_RADIUS = 23
 const AXE_BLADE_RADIUS = 7
 const AXE_HANDLE_LENGTH = 42
 const MIN_DRAG = 18
@@ -27,7 +26,6 @@ const MIN_THROW_SPEED = 430
 const MAX_THROW_SPEED = 1080
 const MIN_STICK_SPEED = 125
 const MAX_STICK_SPEED = 1420
-const MIN_ROPE_LENGTH = 76
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const length = (point: AxeBoundPoint) => Math.hypot(point.x, point.y)
@@ -166,8 +164,7 @@ export class AxeBoundController implements GameController {
   private fallingObjects = new Map<string, number>()
   private particles: Particle[] = []
   private objectById = new Map(AXEBOUND_LEVEL_OBJECTS.map((object) => [object.id, object]))
-  player = { x: 360, y: 7020, vx: 0, vy: 0, rotation: 0, grounded: false }
-  axe = { state: 'held' as AxeState, x: 380, y: 6985, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, returnTime: 0, stuckObjectId: null as string | null, stuckLocal: { x: 0, y: 0 }, ropeLength: 100, stuckTime: 0 }
+  axe = { state: 'ready' as AxeState, x: 360, y: 7042, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor' as string | null, stuckLocal: { x: 0, y: -58 }, stuckTime: 0 }
   aimStart: AxeBoundPoint | null = null
   aimCurrent: AxeBoundPoint | null = null
   falls = 0
@@ -184,7 +181,7 @@ export class AxeBoundController implements GameController {
     if (this.paused || this.status === 'finished') return
     dt = Math.min(dt, .04); this.elapsed += dt
     if (this.clear) {
-      this.clearTimer += dt; this.player.vx *= .94; this.player.vy *= .94; this.cameraY += (0 - this.cameraY) * Math.min(1, dt * 2.2)
+      this.clearTimer += dt; this.axe.vx *= .94; this.axe.vy *= .94; this.cameraY += (0 - this.cameraY) * Math.min(1, dt * 2.2)
       if (this.clearTimer >= 1.8) { this.status = 'finished'; this.options.onFinish(this.score) }
       return
     }
@@ -203,13 +200,6 @@ export class AxeBoundController implements GameController {
 
   private step(dt: number) {
     this.updateAxe(dt)
-    this.applyRopeConstraint(dt)
-    this.player.vy += 930 * dt
-    this.player.vx *= Math.pow(.995, dt * 60); this.player.vy *= Math.pow(.999, dt * 60)
-    this.player.x += this.player.vx * dt; this.player.y += this.player.vy * dt
-    this.player.grounded = false
-    for (let pass = 0; pass < 2; pass++) this.resolvePlayerTerrain()
-    this.player.rotation += this.player.vx * dt * .003
     this.trackProgress()
     this.checkSummit()
   }
@@ -231,23 +221,16 @@ export class AxeBoundController implements GameController {
 
   private throwAxe(direction: AxeBoundPoint, power: number) {
     const speed = MIN_THROW_SPEED + (MAX_THROW_SPEED - MIN_THROW_SPEED) * power
+    const inheritedVelocity = { x: this.axe.vx, y: this.axe.vy }
     this.axe.state = 'flying'; this.axe.stuckObjectId = null; this.axe.flightTime = 0; this.axe.stuckTime = 0
-    this.axe.x = this.player.x + direction.x * (PLAYER_RADIUS + 12); this.axe.y = this.player.y + direction.y * (PLAYER_RADIUS + 12)
-    this.axe.vx = this.player.vx * .2 + direction.x * speed; this.axe.vy = this.player.vy * .12 + direction.y * speed
+    this.axe.x += direction.x * 4; this.axe.y += direction.y * 4
+    this.axe.vx = inheritedVelocity.x * .12 + direction.x * speed; this.axe.vy = inheritedVelocity.y * .12 + direction.y * speed
     this.axe.angle = Math.atan2(direction.y, direction.x); this.axe.angularVelocity = 2.2 + power * 2.2
     this.throws += 1; this.options.onImpact('tap')
   }
 
   private updateAxe(dt: number) {
-    if (this.axe.state === 'held') { this.placeHeldAxe(); return }
-    if (this.axe.state === 'returning') {
-      this.axe.returnTime -= dt
-      const target = { x: this.player.x + 20, y: this.player.y - 18 }
-      this.axe.x += (target.x - this.axe.x) * Math.min(1, dt * 18); this.axe.y += (target.y - this.axe.y) * Math.min(1, dt * 18)
-      if (this.axe.returnTime <= 0) { this.axe.state = 'held'; this.placeHeldAxe() }
-      return
-    }
-    if (this.axe.state === 'stuck') { this.updateStuckAnchor(dt); return }
+    if (this.axe.state === 'ready' || this.axe.state === 'stuck') { this.updateAnchoredAxe(dt); return }
 
     this.axe.flightTime += dt; this.axe.vy += 760 * dt; this.axe.vx *= Math.pow(.998, dt * 60)
     this.axe.x += this.axe.vx * dt; this.axe.y += this.axe.vy * dt; this.axe.angle += this.axe.angularVelocity * dt
@@ -257,16 +240,13 @@ export class AxeBoundController implements GameController {
     const axeVelocity = { x: this.axe.vx, y: this.axe.vy }
     if (bladeContact && canAxeBoundAxeStick(bladeContact.object.material, axeVelocity, bladeContact.normal, this.axe.angle)) this.stickAxe(bladeContact)
     else if (bladeContact || handleContact) this.bounceAxe(bladeContact ?? handleContact!)
-    else if (this.axe.flightTime > 1.75 || this.axe.y > AXEBOUND_WORLD_HEIGHT + 250 || this.axe.x < -180 || this.axe.x > AXEBOUND_WORLD_WIDTH + 180) this.returnAxe()
+    else if (this.axe.y > AXEBOUND_WORLD_HEIGHT + 250) this.resetAxeAtFloor(true)
   }
-
-  private placeHeldAxe() { this.axe.x = this.player.x + 21; this.axe.y = this.player.y - 19; this.axe.angle = -.9; this.axe.vx = 0; this.axe.vy = 0 }
-  private returnAxe() { this.axe.state = 'returning'; this.axe.returnTime = .12; this.axe.stuckObjectId = null }
 
   private stickAxe(contact: Contact) {
     this.axe.state = 'stuck'; this.axe.vx = 0; this.axe.vy = 0; this.axe.angularVelocity = 0; this.axe.stuckObjectId = contact.object.id
     this.axe.stuckLocal = toLocal({ x: this.axe.x, y: this.axe.y }, contact.transform)
-    this.axe.ropeLength = Math.max(MIN_ROPE_LENGTH, Math.hypot(this.player.x - this.axe.x, this.player.y - this.axe.y)); this.axe.stuckTime = 0
+    this.axe.stuckTime = 0
     this.triggerFallingObject(contact.object); this.spawnImpact(this.axe.x, this.axe.y, contact.object.material, true); this.shake = .7; this.options.onImpact('perfect')
   }
 
@@ -275,42 +255,24 @@ export class AxeBoundController implements GameController {
     if (normalSpeed < 0) { this.axe.vx -= (1 + restitution) * normalSpeed * contact.normal.x; this.axe.vy -= (1 + restitution) * normalSpeed * contact.normal.y }
     this.axe.vx *= .72; this.axe.vy *= .72; this.axe.x += contact.normal.x * Math.max(3, contact.penetration); this.axe.y += contact.normal.y * Math.max(3, contact.penetration)
     this.axe.state = 'bouncing'; this.axe.angularVelocity *= -1.08; this.triggerFallingObject(contact.object); this.spawnImpact(this.axe.x, this.axe.y, contact.object.material, false); this.shake = .28; this.options.onImpact('fail')
+    if (contact.normal.y < -.45 && Math.hypot(this.axe.vx, this.axe.vy) < 145) this.settleAxe(contact)
   }
 
-  private updateStuckAnchor(dt: number) {
+  private settleAxe(contact: Contact) {
+    this.axe.state = 'ready'; this.axe.vx = contact.transform.vx; this.axe.vy = contact.transform.vy; this.axe.angularVelocity = 0; this.axe.stuckObjectId = contact.object.id
+    this.axe.stuckLocal = toLocal({ x: this.axe.x, y: this.axe.y }, contact.transform); this.axe.stuckTime = 0
+  }
+
+  private updateAnchoredAxe(dt: number) {
     const object = this.axe.stuckObjectId ? this.objectById.get(this.axe.stuckObjectId) : undefined
-    if (!object) { this.returnAxe(); return }
+    if (!object) { this.axe.state = 'flying'; return }
     const transform = this.getTransform(object), worldOffset = rotate(this.axe.stuckLocal, transform.rotation)
     this.axe.x = transform.x + worldOffset.x; this.axe.y = transform.y + worldOffset.y; this.axe.vx = transform.vx; this.axe.vy = transform.vy; this.axe.stuckTime += dt
   }
 
-  private applyRopeConstraint(dt: number) {
-    if (this.axe.state !== 'stuck') return
-    if (this.axe.stuckTime > .13) this.axe.ropeLength = Math.max(MIN_ROPE_LENGTH, this.axe.ropeLength - 92 * dt)
-    const delta = { x: this.axe.x - this.player.x, y: this.axe.y - this.player.y }, distance = length(delta)
-    if (distance <= this.axe.ropeLength || distance < 1) return
-    const direction = { x: delta.x / distance, y: delta.y / distance }, excess = distance - this.axe.ropeLength
-    const movingAway = Math.max(0, -dot({ x: this.player.vx, y: this.player.vy }, direction))
-    const acceleration = Math.min(5200, excess * 46 + movingAway * 9)
-    this.player.vx += direction.x * acceleration * dt; this.player.vy += direction.y * acceleration * dt
-  }
-
-  private resolvePlayerTerrain() {
-    const nearby = this.nearbyObjects(this.player.y, 150)
-    for (const object of nearby) {
-      const transform = this.getTransform(object), contact = pointContact(this.player, PLAYER_RADIUS, object, transform)
-      if (!contact) continue
-      this.player.x += contact.normal.x * Math.max(0, contact.penetration); this.player.y += contact.normal.y * Math.max(0, contact.penetration)
-      const relativeVelocity = { x: this.player.vx - transform.vx, y: this.player.vy - transform.vy }, intoSurface = dot(relativeVelocity, contact.normal)
-      if (intoSurface < 0) {
-        this.player.vx -= intoSurface * contact.normal.x * 1.08; this.player.vy -= intoSurface * contact.normal.y * 1.08
-        this.player.vx += transform.vx * .18; this.player.vy += transform.vy * .18
-      }
-      const friction = object.material === 'ice' ? .998 : object.material === 'metal' ? .94 : object.material === 'spikeRock' ? .98 : .82
-      if (contact.normal.y < -.45) { this.player.vx *= friction; this.player.grounded = true }
-      else this.player.vy *= .97
-      this.triggerFallingObject(object)
-    }
+  private resetAxeAtFloor(countFall: boolean) {
+    if (countFall) { this.falls += 1; this.fallArmed = false }
+    this.axe = { state: 'ready', x: 360, y: 7042, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor', stuckLocal: { x: 0, y: -58 }, stuckTime: 0 }
   }
 
   private findPointContact(point: AxeBoundPoint, radius: number) {
@@ -331,30 +293,29 @@ export class AxeBoundController implements GameController {
   private triggerFallingObject(object: AxeBoundLevelObject) { if (object.type === 'fallingRock' && !this.fallingObjects.has(object.id)) this.fallingObjects.set(object.id, this.elapsed) }
 
   private trackProgress() {
-    this.highestY = Math.min(this.highestY, this.player.y)
+    this.highestY = Math.min(this.highestY, this.axe.y)
     const heightMeters = this.getHeightMeters(this.highestY)
     if (heightMeters > this.score) { this.score = heightMeters; this.options.onScore(this.score) }
-    const drop = this.player.y - this.highestY
+    const drop = this.axe.y - this.highestY
     if (drop > 620 && this.fallArmed) { this.falls += 1; this.fallArmed = false }
     if (drop < 260) this.fallArmed = true
   }
-  private getHeightMeters(y = this.player.y) { return clamp(Math.round((AXEBOUND_FLOOR_Y - y) / (AXEBOUND_FLOOR_Y - AXEBOUND_SUMMIT_Y) * 1000), 0, 1000) }
+  private getHeightMeters(y = this.axe.y) { return clamp(Math.round((AXEBOUND_FLOOR_Y - y) / (AXEBOUND_FLOOR_Y - AXEBOUND_SUMMIT_Y) * 1000), 0, 1000) }
 
   private checkSummit() {
     if (this.clear) return
     const goal = this.objectById.get('summit-goal')!, goalTransform = this.getTransform(goal)
-    const playerReached = Math.hypot(this.player.x - goalTransform.x, this.player.y - goalTransform.y) < 82
-    const axeReached = this.axe.state === 'stuck' && this.axe.stuckObjectId === goal.id && Math.hypot(this.player.x - this.axe.x, this.player.y - this.axe.y) < 125
-    if (!playerReached && !axeReached) return
+    const axeReached = Math.hypot(this.axe.x - goalTransform.x, this.axe.y - goalTransform.y) < 82 || this.axe.stuckObjectId === goal.id
+    if (!axeReached) return
     this.clear = true; this.score = 1000; this.options.onScore(this.score); this.options.onImpact('perfect')
     if (this.options.preview) { this.reset(); return }
-    this.clearTimer = 0; this.axe.state = 'stuck'; this.axe.stuckObjectId = goal.id; this.axe.x = goalTransform.x; this.axe.y = goalTransform.y; this.axe.stuckLocal = { x: 0, y: 0 }; this.axe.ropeLength = MIN_ROPE_LENGTH
+    this.clearTimer = 0; this.axe.state = 'stuck'; this.axe.stuckObjectId = goal.id; this.axe.x = goalTransform.x; this.axe.y = goalTransform.y; this.axe.stuckLocal = { x: 0, y: 0 }
   }
 
   private updateCamera(dt: number) {
-    const lookAhead = this.player.vy < -120 ? 120 : 0
-    const desired = clamp(this.player.y - this.viewWorldHeight * .61 - lookAhead, 0, Math.max(0, AXEBOUND_WORLD_HEIGHT - this.viewWorldHeight))
-    const followSpeed = this.player.vy > 450 ? 9 : this.aimStart ? 3.2 : 5.4
+    const lookAhead = this.axe.vy < -120 ? 120 : 0
+    const desired = clamp(this.axe.y - this.viewWorldHeight * .61 - lookAhead, 0, Math.max(0, AXEBOUND_WORLD_HEIGHT - this.viewWorldHeight))
+    const followSpeed = this.axe.vy > 450 ? 9 : this.aimStart ? 3.2 : 5.4
     this.cameraY += (desired - this.cameraY) * Math.min(1, dt * followSpeed)
   }
 
@@ -362,9 +323,9 @@ export class AxeBoundController implements GameController {
     this.autoClock += dt
     if (this.autoClock < .72) return
     this.autoClock = 0
-    const candidates = AXEBOUND_LEVEL_OBJECTS.filter((object) => isAxeBoundStickable(object.material) && object.y < this.player.y - 90 && object.y > this.player.y - 520)
-    const target = candidates.sort((a, b) => Math.abs(a.x - this.player.x) + Math.abs(a.y - this.player.y) - (Math.abs(b.x - this.player.x) + Math.abs(b.y - this.player.y)))[0]
-    const direction = target ? normalize({ x: target.x - this.player.x, y: target.y + target.height / 2 - this.player.y }) : normalize({ x: Math.sin(this.elapsed) * .35, y: -1 })
+    const candidates = AXEBOUND_LEVEL_OBJECTS.filter((object) => isAxeBoundStickable(object.material) && object.y < this.axe.y - 90 && object.y > this.axe.y - 520)
+    const target = candidates.sort((a, b) => Math.abs(a.x - this.axe.x) + Math.abs(a.y - this.axe.y) - (Math.abs(b.x - this.axe.x) + Math.abs(b.y - this.axe.y)))[0]
+    const direction = target ? normalize({ x: target.x - this.axe.x, y: target.y + target.height / 2 - this.axe.y }) : normalize({ x: Math.sin(this.elapsed) * .35, y: -1 })
     this.throwAxe(direction, .74)
   }
 
@@ -381,7 +342,7 @@ export class AxeBoundController implements GameController {
     ctx.save()
     if (this.shake > 0) ctx.translate(Math.sin(this.elapsed * 90) * this.shake * 3, Math.cos(this.elapsed * 77) * this.shake * 2)
     for (const object of AXEBOUND_LEVEL_OBJECTS) this.drawObject(ctx, object)
-    this.drawRope(ctx); this.drawParticles(ctx); this.drawPlayer(ctx); this.drawAxe(ctx); this.drawAim(ctx)
+    this.drawParticles(ctx); this.drawAxe(ctx); this.drawAim(ctx)
     ctx.restore()
     this.drawHud(ctx)
     if (this.clear) this.drawClearOverlay(ctx)
@@ -426,26 +387,10 @@ export class AxeBoundController implements GameController {
     if (object.type === 'goal') { ctx.save(); ctx.globalCompositeOperation = 'lighter'; const glow = ctx.createRadialGradient(screen.x, screen.y, 4, screen.x, screen.y, 70); glow.addColorStop(0, 'rgba(255,244,154,.9)'); glow.addColorStop(1, 'rgba(255,217,73,0)'); ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(screen.x, screen.y, 70, 0, Math.PI * 2); ctx.fill(); ctx.restore() }
   }
 
-  private drawPlayer(ctx: CanvasRenderingContext2D) {
-    const point = this.worldToScreen(this.player), radius = PLAYER_RADIUS * this.scale
-    ctx.save(); ctx.translate(point.x, point.y); ctx.rotate(this.player.rotation * .15)
-    if (this.player.vy > 520) { ctx.strokeStyle = 'rgba(255,80,177,.28)'; ctx.lineWidth = 2; for (let index = -2; index <= 2; index++) { ctx.beginPath(); ctx.moveTo(index * 7, -34); ctx.lineTo(index * 7, -70 - Math.min(50, this.player.vy * .04)); ctx.stroke() } }
-    ctx.fillStyle = '#f5a53b'; ctx.shadowColor = '#ff8d32'; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(0, -radius * .42, radius * .43, 0, Math.PI * 2); ctx.fill()
-    ctx.shadowBlur = 0; ctx.fillStyle = '#ffd16a'; ctx.beginPath(); ctx.roundRect(-radius * .48, -radius * .08, radius * .96, radius * 1.25, radius * .34); ctx.fill()
-    ctx.fillStyle = '#4a174f'; ctx.beginPath(); ctx.moveTo(-radius * .42, radius * .12); ctx.lineTo(radius * .52, radius * .25); ctx.lineTo(0, radius * 1.2); ctx.closePath(); ctx.fill()
-    ctx.strokeStyle = '#ffcf45'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-radius * .2, radius * 1.1); ctx.lineTo(-radius * .55, radius * 1.55); ctx.moveTo(radius * .18, radius * 1.1); ctx.lineTo(radius * .52, radius * 1.5); ctx.stroke(); ctx.restore()
-  }
-
   private drawAxe(ctx: CanvasRenderingContext2D) {
     const point = this.worldToScreen(this.axe); ctx.save(); ctx.translate(point.x, point.y); ctx.rotate(this.axe.angle); ctx.scale(this.scale, this.scale)
     ctx.strokeStyle = '#ffca45'; ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.shadowColor = '#ffae32'; ctx.shadowBlur = 14; ctx.beginPath(); ctx.moveTo(-AXE_HANDLE_LENGTH, 0); ctx.lineTo(-5, 0); ctx.stroke()
     ctx.fillStyle = '#fff1a0'; ctx.beginPath(); ctx.moveTo(4, 0); ctx.quadraticCurveTo(-4, -22, -20, -18); ctx.lineTo(-10, 1); ctx.lineTo(-20, 18); ctx.quadraticCurveTo(-4, 22, 4, 0); ctx.fill(); ctx.restore()
-  }
-
-  private drawRope(ctx: CanvasRenderingContext2D) {
-    if (this.axe.state !== 'stuck') return
-    const player = this.worldToScreen(this.player), axe = this.worldToScreen(this.axe)
-    ctx.save(); ctx.strokeStyle = 'rgba(255,205,70,.82)'; ctx.shadowColor = '#ff3f9f'; ctx.shadowBlur = 8; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.quadraticCurveTo((player.x + axe.x) / 2 + this.player.vx * .015, (player.y + axe.y) / 2 + 8, axe.x, axe.y); ctx.stroke(); ctx.restore()
   }
 
   private drawParticles(ctx: CanvasRenderingContext2D) {
@@ -460,16 +405,16 @@ export class AxeBoundController implements GameController {
     const direction = normalize({ x: -drag.x, y: -drag.y }), power = clamp(dragLength / MAX_DRAG, 0, 1), speed = MIN_THROW_SPEED + (MAX_THROW_SPEED - MIN_THROW_SPEED) * power
     const cappedDrag = Math.min(MAX_DRAG, dragLength), dragDirection = normalize(drag)
     ctx.save(); ctx.strokeStyle = '#ffcc45'; ctx.lineWidth = 3; ctx.shadowColor = '#ff3f9f'; ctx.shadowBlur = 10; ctx.beginPath(); ctx.moveTo(this.aimStart.x, this.aimStart.y); ctx.lineTo(this.aimStart.x + dragDirection.x * cappedDrag, this.aimStart.y + dragDirection.y * cappedDrag); ctx.stroke(); ctx.shadowBlur = 0
-    const player = this.worldToScreen(this.player)
+    const axe = this.worldToScreen(this.axe)
     for (let index = 1; index <= 7; index++) {
-      const time = index * .075, world = { x: this.player.x + direction.x * speed * time, y: this.player.y + direction.y * speed * time + 380 * time * time }
+      const time = index * .075, world = { x: this.axe.x + direction.x * speed * time, y: this.axe.y + direction.y * speed * time + 380 * time * time }
       const point = this.worldToScreen(world); ctx.globalAlpha = 1 - index * .09; ctx.fillStyle = index === 7 ? '#ff5fae' : '#ffe486'; ctx.beginPath(); ctx.arc(point.x, point.y, index === 7 ? 4 : 2.5, 0, Math.PI * 2); ctx.fill()
     }
-    ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = '800 9px system-ui'; ctx.textAlign = 'center'; ctx.fillText(`${Math.round(power * 100)}%`, player.x, player.y + 44); ctx.restore()
+    ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = '800 9px system-ui'; ctx.textAlign = 'center'; ctx.fillText(`${Math.round(power * 100)}%`, axe.x, axe.y + 44); ctx.restore()
   }
 
   private drawHud(ctx: CanvasRenderingContext2D) {
-    const currentHeight = this.getHeightMeters(), zone = AXEBOUND_ZONES.find((item) => this.player.y >= item.y) ?? AXEBOUND_ZONES[AXEBOUND_ZONES.length - 1]
+    const currentHeight = this.getHeightMeters(), zone = AXEBOUND_ZONES.find((item) => this.axe.y >= item.y) ?? AXEBOUND_ZONES[AXEBOUND_ZONES.length - 1]
     ctx.save(); ctx.fillStyle = 'rgba(5,3,12,.82)'; ctx.strokeStyle = 'rgba(255,64,157,.28)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(12, 10, this.w - 24, 55, 14); ctx.fill(); ctx.stroke()
     ctx.textAlign = 'left'; ctx.fillStyle = '#ff5bae'; ctx.font = '900 8px ui-monospace, monospace'; ctx.fillText(zone.name, 26, 27); ctx.fillStyle = '#fff'; ctx.font = '900 16px ui-monospace, monospace'; ctx.fillText(`HEIGHT ${currentHeight}m`, 26, 49)
     ctx.textAlign = 'right'; ctx.fillStyle = '#9c86ae'; ctx.font = '800 8px ui-monospace, monospace'; ctx.fillText('SESSION BEST', this.w - 26, 27); ctx.fillStyle = '#ffe066'; ctx.font = '900 16px ui-monospace, monospace'; ctx.fillText(`${this.score}m`, this.w - 26, 49)
@@ -492,8 +437,7 @@ export class AxeBoundController implements GameController {
   resume() { this.paused = false; if (this.status === 'paused') this.status = 'playing' }
   restart() { this.score = 0; this.elapsed = 0; this.paused = false; this.status = 'playing'; this.reset() }
   reset() {
-    this.player = { x: 360, y: 7020, vx: 0, vy: 0, rotation: 0, grounded: false }
-    this.axe = { state: 'held', x: 380, y: 6985, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, returnTime: 0, stuckObjectId: null, stuckLocal: { x: 0, y: 0 }, ropeLength: 100, stuckTime: 0 }
+    this.axe = { state: 'ready', x: 360, y: 7042, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor', stuckLocal: { x: 0, y: -58 }, stuckTime: 0 }
     this.cameraY = clamp(AXEBOUND_FLOOR_Y - this.viewWorldHeight * .86, 0, AXEBOUND_WORLD_HEIGHT - this.viewWorldHeight); this.highestY = AXEBOUND_FLOOR_Y; this.aimStart = null; this.aimCurrent = null; this.falls = 0; this.throws = 0; this.fallArmed = true; this.shake = 0; this.autoClock = 0; this.clear = false; this.clearTimer = 0; this.fallingObjects.clear(); this.particles = []
   }
   destroy() { this.paused = true; this.particles = [] }

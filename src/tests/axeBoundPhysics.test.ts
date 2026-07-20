@@ -22,7 +22,7 @@ describe('AXEBOUND physics', () => {
     expect(controller.throws).toBe(1)
   })
 
-  it('fires upward when the player pulls straight down', () => {
+  it('fires the axe upward when pulling straight down', () => {
     const { controller } = makeController()
     controller.pointerDown(350, 140); controller.pointerUp(350, 260)
 
@@ -30,11 +30,11 @@ describe('AXEBOUND physics', () => {
     expect(controller.axe.vy).toBeLessThan(-400)
   })
 
-  it('cancels a very short drag without releasing a held axe', () => {
+  it('cancels a very short drag without releasing the ready axe', () => {
     const { controller } = makeController()
     controller.pointerDown(100, 300); controller.pointerUp(108, 306)
 
-    expect(controller.axe.state).toBe('held')
+    expect(controller.axe.state).toBe('ready')
     expect(controller.throws).toBe(0)
   })
 
@@ -49,7 +49,7 @@ describe('AXEBOUND physics', () => {
     expect(canAxeBoundAxeStick('rock', upward, undersideNormal, 0)).toBe(false)
   })
 
-  it('sticks into a real rock surface and pulls the player without teleporting', () => {
+  it('sticks into a real rock and launches the same axe from that position', () => {
     const { controller } = makeController()
     controller.axe.state = 'flying'; controller.axe.x = 360; controller.axe.y = 6307
     controller.axe.vx = 0; controller.axe.vy = -500; controller.axe.angle = -Math.PI / 2; controller.axe.angularVelocity = 0; controller.axe.flightTime = 0
@@ -58,28 +58,50 @@ describe('AXEBOUND physics', () => {
     expect(controller.axe.state).toBe('stuck')
     expect(controller.axe.stuckObjectId).toBe('zone1-rest')
 
-    controller.player.x = 360; controller.player.y = 6500; controller.player.vx = 0; controller.player.vy = 0
-    controller.axe.ropeLength = 120; controller.axe.stuckTime = 1
-    const previousY = controller.player.y
-    controller.update(.04)
+    const anchor = { x: controller.axe.x, y: controller.axe.y }
+    controller.pointerDown(300, 300); controller.pointerUp(300, 420)
 
-    expect(controller.player.y).toBeLessThan(previousY)
-    expect(controller.player.vy).toBeLessThan(0)
+    expect(controller.axe.state).toBe('flying')
+    expect(controller.axe.x).toBeCloseTo(anchor.x, 0)
+    expect(controller.axe.y).toBeLessThan(anchor.y)
+    expect(controller.axe.vy).toBeLessThan(0)
   })
 
-  it('never ends the run because the player falls onto lower terrain', () => {
+  it('contains no separate player body or character rope', () => {
+    const { controller } = makeController()
+
+    expect('player' in controller).toBe(false)
+    expect('drawPlayer' in controller).toBe(false)
+    expect('drawRope' in controller).toBe(false)
+  })
+
+  it('re-aims the same axe in midair instead of spawning another object', () => {
+    const { controller } = makeController()
+    controller.axe.state = 'flying'; controller.axe.stuckObjectId = null
+    controller.axe.x = 220; controller.axe.y = 540; controller.axe.vx = 180; controller.axe.vy = 260
+    controller.pointerDown(40, 120); controller.pointerUp(40, 240)
+
+    expect(controller.axe.x).toBe(220)
+    expect(controller.axe.y).toBeLessThan(540)
+    expect(controller.axe.vy).toBeLessThan(0)
+    expect(controller.throws).toBe(1)
+  })
+
+  it('never ends the run because the axe falls onto lower terrain', () => {
     const { controller, onFinish } = makeController()
-    controller.player.x = 360; controller.player.y = 6500; controller.player.vy = 900
+    controller.axe.state = 'flying'; controller.axe.stuckObjectId = null
+    controller.axe.x = 360; controller.axe.y = 6500; controller.axe.vy = 900
     for (let index = 0; index < 80; index++) controller.update(.04)
 
     expect(controller.getStatus()).toBe('playing')
-    expect(controller.player.y).toBeLessThan(7155)
+    expect(controller.axe.y).toBeLessThan(7155)
     expect(onFinish).not.toHaveBeenCalled()
   })
 
   it('finishes only after reaching the summit altar', () => {
     const { controller, onFinish } = makeController()
-    controller.player.x = 360; controller.player.y = 85; controller.player.vx = 0; controller.player.vy = 0
+    controller.axe.state = 'flying'; controller.axe.stuckObjectId = null
+    controller.axe.x = 360; controller.axe.y = 85; controller.axe.vx = 0; controller.axe.vy = 0
     controller.update(.01)
 
     expect(controller.getStatus()).toBe('playing')
