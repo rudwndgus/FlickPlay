@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { gameRegistry } from '../games/registry'
 import { AxeBoundController, canAxeBoundAxeStick } from '../games/runtime/AxeBoundController'
-import { AXEBOUND_LEVEL_OBJECTS, isAxeBoundStickable } from '../games/runtime/axeBoundLevel'
+import { AXEBOUND_LEVEL_OBJECTS, AXEBOUND_ZONES, isAxeBoundStickable } from '../games/runtime/axeBoundLevel'
 
 const makeController = () => {
   const game = gameRegistry.find((item) => item.id === 'axebound')!
@@ -75,6 +75,14 @@ describe('AXEBOUND physics', () => {
     expect('drawRope' in controller).toBe(false)
   })
 
+  it('loads the dedicated golden axe artwork', () => {
+    const { controller } = makeController()
+    const sprite = (controller as unknown as { axeSprite: HTMLImageElement }).axeSprite
+
+    expect(sprite).toBeInstanceOf(HTMLImageElement)
+    expect(sprite.src).toContain('/assets/games/axebound/axe.png')
+  })
+
   it('re-aims the same axe in midair instead of spawning another object', () => {
     const { controller } = makeController()
     controller.axe.state = 'flying'; controller.axe.stuckObjectId = null
@@ -119,6 +127,14 @@ describe('AXEBOUND physics', () => {
     expect(AXEBOUND_LEVEL_OBJECTS.some((object) => !isAxeBoundStickable(object.material))).toBe(true)
     const objectTypes = new Set(AXEBOUND_LEVEL_OBJECTS.map((object) => object.type))
     for (const type of ['movingPlatform', 'rotatingBeam', 'swingingBlock', 'fallingRock', 'goal'] as const) expect(objectTypes.has(type)).toBe(true)
+  })
+
+  it('matches the reference map progression from the pit to the crown', () => {
+    expect(AXEBOUND_ZONES.map((zone) => zone.name)).toEqual([
+      'THE PIT', 'THE CHANDELIER', 'BROKEN STEPS', 'CRYSTAL VEIN', 'IRON THROAT', 'WIND SHAFT', 'FALSE SUMMIT', 'THE CROWN',
+    ])
+    const ids = new Set(AXEBOUND_LEVEL_OBJECTS.map((object) => object.id))
+    for (const id of ['pit-rotating-beam', 'chandelier-swing-01', 'step-moving-01', 'crystal-right-lower', 'iron-rotating-wood', 'wind-moving-rock', 'false-falling-rock', 'summit-goal']) expect(ids.has(id)).toBe(true)
   })
 
   it('provides a summit route whose consecutive stickable targets stay in throw range', () => {

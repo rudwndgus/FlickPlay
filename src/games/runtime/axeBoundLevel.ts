@@ -49,74 +49,85 @@ const polygon = (id: string, material: AxeBoundMaterial, x: number, y: number, p
 }
 
 export const AXEBOUND_LEVEL_OBJECTS: readonly AxeBoundLevelObject[] = [
-  // Natural, visible outer cliff faces keep the player inside the shaft.
-  rect('outer-left-cliff', 'spikeRock', -75, 3600, 115, 7200),
-  rect('outer-right-cliff', 'spikeRock', 680, 3600, 115, 7200),
+  // Segmented outer masonry keeps the silhouette irregular like the reference spire.
+  rect('outer-left-01', 'spikeRock', -35, 6750, 75, 900), rect('outer-right-01', 'spikeRock', 680, 6750, 75, 900),
+  rect('outer-left-02', 'spikeRock', -35, 5850, 75, 900), rect('outer-right-02', 'spikeRock', 680, 5850, 75, 900),
+  rect('outer-left-03', 'spikeRock', -35, 4950, 75, 900), rect('outer-right-03', 'spikeRock', 680, 4950, 75, 900),
+  rect('outer-left-04', 'spikeRock', -35, 4050, 75, 900), rect('outer-right-04', 'spikeRock', 680, 4050, 75, 900),
+  rect('outer-left-05', 'spikeRock', -35, 3150, 75, 900), rect('outer-right-05', 'spikeRock', 680, 3150, 75, 900),
+  rect('outer-left-06', 'spikeRock', -35, 2250, 75, 900), rect('outer-right-06', 'spikeRock', 680, 2250, 75, 900),
+  rect('outer-left-07', 'spikeRock', -35, 1350, 75, 900), rect('outer-right-07', 'spikeRock', 680, 1350, 75, 900),
+  rect('outer-left-08', 'spikeRock', -35, 450, 75, 900), rect('outer-right-08', 'spikeRock', 680, 450, 75, 900),
 
-  // ZONE 1 — THE PIT
+  // ZONE 1 — THE PIT: wide recovery basin and the first rotating beam.
   rect('start-floor', 'rock', 40, 7100, 640, 100),
-  rect('pit-left-wall', 'rock', 20, 6650, 90, 1000, -.03),
-  rect('pit-right-wall', 'rock', 610, 6600, 90, 1100, .03),
-  rect('tutorial-rock-01', 'rock', 410, 6870, 180, 42, -.18),
-  rect('tutorial-rock-02', 'rock', 155, 6670, 170, 44, .2),
-  rect('tutorial-rock-03', 'wood', 390, 6460, 200, 38, -.3),
+  rect('pit-left-wall', 'rock', 20, 6750, 120, 720, -.03),
+  rect('pit-right-wall', 'rock', 570, 6710, 130, 780, .03),
+  rect('tutorial-rock-01', 'rock', 430, 6870, 190, 48, -.12),
+  rect('tutorial-rock-02', 'rock', 125, 6710, 185, 46, .18),
+  { ...rect('pit-rotating-beam', 'wood', 250, 6490, 280, 34, 0, 'rotatingBeam'), rotationSpeed: -.2 },
+  rect('tutorial-rock-03', 'rock', 470, 6450, 180, 46, -.18),
   rect('zone1-rest', 'rock', 195, 6260, 330, 60),
 
-  // ZONE 2 — BROKEN STEPS
-  rect('step-left-01', 'rock', 55, 6070, 250, 48, .12),
-  rect('step-right-01', 'rock', 430, 5880, 235, 48, -.16),
-  rect('step-left-02', 'rock', 65, 5660, 210, 46, .25),
-  rect('step-center-metal', 'metal', 260, 5520, 210, 32, -.08),
-  rect('step-right-02', 'rock', 475, 5400, 190, 48, -.22),
-  rect('zone2-catch-left', 'rock', 20, 5740, 100, 520, -.02),
-  rect('zone2-catch-right', 'rock', 610, 5570, 90, 430, .02),
-  rect('zone2-rest', 'rock', 175, 5270, 370, 62),
+  // ZONE 2 — THE CHANDELIER: right-hand tower, rotating timber and two pendulums.
+  rect('chandelier-left-catch', 'rock', 40, 6090, 230, 54, .12),
+  { ...rect('chandelier-rotating-wood', 'wood', 170, 5920, 270, 34, 0, 'rotatingBeam'), rotationSpeed: .23 },
+  rect('chandelier-right-step-01', 'rock', 500, 5990, 175, 50, -.14),
+  rect('chandelier-right-tower', 'rock', 545, 5740, 150, 430, .02),
+  { ...rect('chandelier-swing-01', 'metal', 380, 5800, 92, 68, 0, 'swingingBlock'), x: 426, anchorX: 426, anchorY: 5570, ropeLength: 230 },
+  { ...rect('chandelier-swing-02', 'rock', 245, 5630, 112, 66, 0, 'swingingBlock'), x: 301, anchorX: 301, anchorY: 5430, ropeLength: 200 },
+  rect('chandelier-mid-step', 'wood', 115, 5660, 170, 34, .26),
+  rect('chandelier-exit-rest', 'rock', 180, 5390, 360, 60),
 
-  // ZONE 3 — IRON THROAT
-  rect('iron-left-wall', 'metal', 65, 4740, 105, 1050, .04),
-  rect('iron-right-wall', 'metal', 550, 4700, 105, 1100, -.04),
-  rect('iron-rock-01', 'rock', 180, 5100, 150, 45, -.25),
-  rect('iron-rock-02', 'rock', 410, 4900, 135, 42, .22),
-  circle('iron-rock-03', 'rock', 280, 4680, 58),
-  rect('iron-rock-04', 'wood', 390, 4500, 180, 35, -.45),
-  rect('iron-bottom-catcher', 'rock', 190, 5180, 340, 50),
-  rect('iron-exit-rest', 'rock', 145, 4370, 430, 64),
+  // ZONE 3 — BROKEN STEPS: crumbling staggered ruins and shifting footholds.
+  rect('step-left-ruin', 'rock', 40, 5120, 180, 470, -.02),
+  rect('step-left-01', 'rock', 70, 5260, 215, 48, .12),
+  { ...rect('step-moving-01', 'rock', 255, 5100, 155, 44, 0, 'movingPlatform'), moveDistance: 220, moveDuration: 3200 },
+  rect('step-right-01', 'rock', 460, 4930, 220, 50, -.14),
+  rect('step-center-01', 'rock', 260, 4760, 170, 46, .18),
+  rect('step-left-metal', 'metal', 45, 4660, 155, 34, -.08),
+  rect('step-right-02', 'wood', 460, 4580, 185, 34, -.2),
+  rect('zone2-rest', 'rock', 170, 4470, 380, 62),
 
-  // ZONE 4 — THE CHANDELIER
-  rect('chandelier-left-anchor', 'rock', 40, 4160, 210, 52, .18),
-  { ...rect('swinging-rock-01', 'rock', 295, 4300, 130, 65, 0, 'swingingBlock'), x: 360, anchorX: 360, anchorY: 4100, ropeLength: 200 },
-  { ...rect('moving-wood-01', 'wood', 190, 3930, 180, 34, 0, 'movingPlatform'), moveDistance: 260, moveDuration: 3600 },
-  { ...rect('rotating-metal-01', 'metal', 180, 3730, 360, 28, 0, 'rotatingBeam'), rotationSpeed: .22 },
-  rect('chandelier-rock-02', 'rock', 490, 3540, 185, 48, -.3),
-  rect('chandelier-catch-left', 'rock', 15, 3700, 95, 470),
-  rect('zone4-rest', 'rock', 170, 3400, 390, 64),
+  // ZONE 4 — CRYSTAL VEIN: unforgiving right wall and a narrow safe zig-zag.
+  polygon('crystal-right-lower', 'crystal', 590, 4210, [{ x: -80, y: 330 }, { x: -45, y: -320 }, { x: 28, y: -270 }, { x: 92, y: 300 }]),
+  polygon('crystal-right-upper', 'crystal', 610, 3750, [{ x: -95, y: 300 }, { x: -55, y: -310 }, { x: 38, y: -260 }, { x: 88, y: 280 }]),
+  rect('crystal-metal-rib', 'metal', 625, 4050, 58, 690, -.02),
+  rect('crystal-lower-catcher', 'rock', 45, 4380, 330, 54, .08),
+  rect('crystal-rock-01', 'rock', 300, 4230, 145, 44, -.26),
+  rect('crystal-rock-02', 'wood', 125, 4040, 170, 34, .3),
+  circle('crystal-rock-03', 'rock', 395, 3880, 54),
+  rect('crystal-rock-04', 'rock', 175, 3700, 180, 44, -.25),
+  rect('crystal-exit-rest', 'rock', 340, 3510, 270, 58),
 
-  // ZONE 5 — FALSE SUMMIT
-  rect('false-left-rock', 'rock', 40, 3240, 260, 50, .15),
-  rect('false-right-rock', 'rock', 440, 3070, 240, 48, -.2),
-  polygon('false-center-crystal', 'crystal', 360, 2920, [{ x: -95, y: 80 }, { x: -35, y: -85 }, { x: 40, y: -110 }, { x: 105, y: 70 }]),
-  circle('false-small-rock', 'rock', 175, 2840, 52),
-  { ...rect('false-falling-rock', 'rock', 480, 2740, 150, 48, 0, 'fallingRock'), triggerDelay: 450, resetDelay: 4000 },
-  rect('false-catch-right', 'rock', 620, 2900, 80, 480),
+  // ZONE 5 — IRON THROAT: a narrow metal choke with one rotating timber.
+  rect('iron-left-wall', 'metal', 55, 3070, 105, 900, .025),
+  rect('iron-right-wall', 'metal', 555, 3070, 105, 900, -.025),
+  rect('iron-bottom-catcher', 'rock', 170, 3430, 370, 54),
+  rect('iron-rock-01', 'rock', 190, 3290, 145, 44, -.2),
+  { ...rect('iron-rotating-wood', 'wood', 205, 3080, 310, 34, 0, 'rotatingBeam'), rotationSpeed: -.17 },
+  rect('iron-rock-02', 'rock', 430, 2920, 140, 44, .2),
+  circle('iron-rock-03', 'rock', 260, 2770, 50),
+  rect('iron-exit-rest', 'rock', 150, 2600, 420, 62),
 
-  // ZONE 6 — CRYSTAL VEIN
-  polygon('crystal-left-mass', 'crystal', 120, 2420, [{ x: -100, y: 300 }, { x: -70, y: -280 }, { x: 40, y: -220 }, { x: 100, y: 260 }]),
-  polygon('crystal-right-mass', 'crystal', 600, 2250, [{ x: -90, y: 350 }, { x: -55, y: -330 }, { x: 65, y: -250 }, { x: 95, y: 300 }]),
-  rect('crystal-rock-01', 'rock', 250, 2530, 145, 42, -.32),
-  rect('crystal-rock-02', 'wood', 405, 2320, 145, 34, .35),
-  circle('crystal-rock-03', 'rock', 275, 2100, 48),
-  rect('crystal-rock-04', 'rock', 420, 1920, 165, 42, -.35),
-  rect('crystal-lower-catcher', 'rock', 190, 2630, 350, 52),
-  rect('crystal-exit-rest', 'rock', 150, 1730, 420, 62),
+  // ZONE 6 — WIND SHAFT: non-stick walls, crystal teeth and a moving lift.
+  rect('wind-left-wall', 'rock', 40, 2180, 105, 780, .02),
+  rect('wind-right-wall', 'ice', 585, 2170, 100, 900, -.02),
+  polygon('wind-crystal-teeth', 'crystal', 535, 2150, [{ x: -35, y: 360 }, { x: -70, y: 180 }, { x: -25, y: 40 }, { x: -65, y: -100 }, { x: -20, y: -340 }, { x: 55, y: -320 }, { x: 65, y: 340 }]),
+  rect('wind-rock-01', 'rock', 155, 2490, 140, 42, .24),
+  { ...rect('wind-moving-rock', 'metal', 270, 2300, 180, 34, 0, 'movingPlatform'), moveDistance: 230, moveDuration: 2800 },
+  rect('wind-rock-02', 'wood', 405, 2110, 145, 34, -.22),
+  circle('wind-rock-03', 'rock', 245, 1940, 50),
+  rect('wind-upper-rock', 'rock', 390, 1760, 200, 46, -.16),
 
-  // ZONE 7 — WIND SHAFT
-  rect('wind-left-wall', 'ice', 40, 1170, 100, 1150, .03),
-  rect('wind-right-wall', 'metal', 580, 1150, 100, 1180, -.03),
-  rect('wind-rock-01', 'rock', 160, 1560, 130, 40, .28),
-  { ...rect('wind-moving-rock', 'rock', 280, 1360, 150, 42, 0, 'movingPlatform'), moveDistance: 210, moveDuration: 2800 },
-  circle('wind-rock-02', 'rock', 470, 1150, 52),
-  { ...rect('wind-rotating-wood', 'wood', 200, 970, 300, 30, 0, 'rotatingBeam'), rotationSpeed: -.18 },
-  rect('wind-upper-rock', 'rock', 160, 810, 190, 42, .18),
+  // ZONE 7 — FALSE SUMMIT: a tempting shelf that collapses into the shaft.
+  rect('false-left-rock', 'rock', 45, 1600, 260, 52, .12),
+  rect('false-right-rock', 'rock', 440, 1450, 235, 48, -.18),
+  polygon('false-center-crystal', 'crystal', 355, 1300, [{ x: -90, y: 75 }, { x: -30, y: -90 }, { x: 42, y: -105 }, { x: 100, y: 65 }]),
+  { ...rect('false-falling-rock', 'rock', 445, 1140, 165, 48, 0, 'fallingRock'), triggerDelay: 420, resetDelay: 4000 },
+  circle('false-small-rock', 'rock', 185, 990, 52),
+  rect('false-narrow-wood', 'wood', 340, 870, 165, 34, .28),
+  rect('false-exit-rest', 'rock', 115, 760, 420, 60),
 
   // ZONE 8 — THE CROWN
   rect('crown-right-rock-01', 'rock', 460, 690, 215, 46, -.2),
@@ -130,12 +141,12 @@ export const AXEBOUND_LEVEL_OBJECTS: readonly AxeBoundLevelObject[] = [
 
 export const AXEBOUND_ZONES = [
   { y: 6250, name: 'THE PIT' },
-  { y: 5350, name: 'BROKEN STEPS' },
-  { y: 4450, name: 'IRON THROAT' },
-  { y: 3500, name: 'THE CHANDELIER' },
-  { y: 2700, name: 'FALSE SUMMIT' },
-  { y: 1800, name: 'CRYSTAL VEIN' },
-  { y: 850, name: 'WIND SHAFT' },
+  { y: 5350, name: 'THE CHANDELIER' },
+  { y: 4550, name: 'BROKEN STEPS' },
+  { y: 3500, name: 'CRYSTAL VEIN' },
+  { y: 2600, name: 'IRON THROAT' },
+  { y: 1700, name: 'WIND SHAFT' },
+  { y: 750, name: 'FALSE SUMMIT' },
   { y: 0, name: 'THE CROWN' },
 ] as const
 

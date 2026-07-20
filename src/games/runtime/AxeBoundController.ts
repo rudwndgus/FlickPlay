@@ -19,7 +19,8 @@ type Particle = AxeBoundPoint & { vx: number; vy: number; life: number; color: s
 
 const MAX_STEP = 1 / 120
 const AXE_BLADE_RADIUS = 7
-const AXE_HANDLE_LENGTH = 42
+const AXE_BLADE_OFFSET = 20
+const AXE_HANDLE_TIP = { x: -14, y: 46 }
 const MIN_DRAG = 18
 const MAX_DRAG = 180
 const MIN_THROW_SPEED = 430
@@ -137,13 +138,22 @@ const pointContact = (point: AxeBoundPoint, radius: number, object: AxeBoundLeve
 }
 
 const materialPalette: Record<AxeBoundMaterial, { fill: string; edge: string }> = {
-  rock: { fill: '#24102f', edge: '#ff2b93' },
-  wood: { fill: '#4d251f', edge: '#ffb23e' },
-  metal: { fill: '#14283d', edge: '#54d9ff' },
-  crystal: { fill: '#32134d', edge: '#54ffe1' },
-  spikeRock: { fill: '#180d20', edge: '#8d235e' },
-  ice: { fill: '#12334d', edge: '#8eefff' },
+  rock: { fill: '#25102f', edge: '#ff278c' },
+  wood: { fill: '#52291e', edge: '#f39a25' },
+  metal: { fill: '#1b2741', edge: '#8896be' },
+  crystal: { fill: '#471052', edge: '#f42aa1' },
+  spikeRock: { fill: '#15091e', edge: '#9d155f' },
+  ice: { fill: '#112b48', edge: '#38bde3' },
 }
+
+const MAP_LANTERNS: readonly AxeBoundPoint[] = [
+  { x: 355, y: 6960 }, { x: 505, y: 6170 }, { x: 125, y: 5520 }, { x: 420, y: 4620 },
+  { x: 265, y: 3570 }, { x: 360, y: 2470 }, { x: 520, y: 1660 }, { x: 315, y: 720 }, { x: 360, y: 220 },
+]
+const MAP_BANNERS: readonly (AxeBoundPoint & { color: string })[] = [
+  { x: 205, y: 6860, color: '#77204b' }, { x: 540, y: 6080, color: '#9a1c59' },
+  { x: 125, y: 4860, color: '#3e256d' }, { x: 505, y: 1510, color: '#7c174d' },
+]
 
 export class AxeBoundController implements GameController {
   private w = 390
@@ -164,13 +174,21 @@ export class AxeBoundController implements GameController {
   private fallingObjects = new Map<string, number>()
   private particles: Particle[] = []
   private objectById = new Map(AXEBOUND_LEVEL_OBJECTS.map((object) => [object.id, object]))
+  private axeSprite: HTMLImageElement | null = null
+  private launchIgnoreId: string | null = null
+  private launchIgnoreTimer = 0
   axe = { state: 'ready' as AxeState, x: 360, y: 7042, vx: 0, vy: 0, angle: -Math.PI / 2, angularVelocity: 0, flightTime: 0, stuckObjectId: 'start-floor' as string | null, stuckLocal: { x: 0, y: -58 }, stuckTime: 0 }
   aimStart: AxeBoundPoint | null = null
   aimCurrent: AxeBoundPoint | null = null
   falls = 0
   throws = 0
 
-  constructor(private readonly theme: GameTheme, private readonly options: ControllerOptions) { this.reset() }
+  constructor(private readonly theme: GameTheme, private readonly options: ControllerOptions) {
+    if (typeof Image !== 'undefined') {
+      this.axeSprite = new Image(); this.axeSprite.decoding = 'async'; this.axeSprite.src = `${import.meta.env.BASE_URL}assets/games/axebound/axe.png`
+    }
+    this.reset()
+  }
 
   resize(width: number, height: number, _dpr?: number) {
     this.w = width; this.h = height; this.scale = width / AXEBOUND_WORLD_WIDTH; this.viewWorldHeight = height / this.scale
@@ -222,6 +240,7 @@ export class AxeBoundController implements GameController {
   private throwAxe(direction: AxeBoundPoint, power: number) {
     const speed = MIN_THROW_SPEED + (MAX_THROW_SPEED - MIN_THROW_SPEED) * power
     const inheritedVelocity = { x: this.axe.vx, y: this.axe.vy }
+    this.launchIgnoreId = this.axe.stuckObjectId; this.launchIgnoreTimer = .09
     this.axe.state = 'flying'; this.axe.stuckObjectId = null; this.axe.flightTime = 0; this.axe.stuckTime = 0
     this.axe.x += direction.x * 4; this.axe.y += direction.y * 4
     this.axe.vx = inheritedVelocity.x * .12 + direction.x * speed; this.axe.vy = inheritedVelocity.y * .12 + direction.y * speed
@@ -232,10 +251,13 @@ export class AxeBoundController implements GameController {
   private updateAxe(dt: number) {
     if (this.axe.state === 'ready' || this.axe.state === 'stuck') { this.updateAnchoredAxe(dt); return }
 
+    this.launchIgnoreTimer = Math.max(0, this.launchIgnoreTimer - dt)
     this.axe.flightTime += dt; this.axe.vy += 760 * dt; this.axe.vx *= Math.pow(.998, dt * 60)
     this.axe.x += this.axe.vx * dt; this.axe.y += this.axe.vy * dt; this.axe.angle += this.axe.angularVelocity * dt
-    const bladeContact = this.findPointContact({ x: this.axe.x, y: this.axe.y }, AXE_BLADE_RADIUS)
-    const handlePoint = { x: this.axe.x - Math.cos(this.axe.angle) * AXE_HANDLE_LENGTH, y: this.axe.y - Math.sin(this.axe.angle) * AXE_HANDLE_LENGTH }
+    const bladePoint = { x: this.axe.x + Math.cos(this.axe.angle) * AXE_BLADE_OFFSET, y: this.axe.y + Math.sin(this.axe.angle) * AXE_BLADE_OFFSET }
+    const bladeContact = this.findPointContact(bladePoint, AXE_BLADE_RADIUS)
+    const handleOffset = rotate(AXE_HANDLE_TIP, this.axe.angle)
+    const handlePoint = { x: this.axe.x + handleOffset.x, y: this.axe.y + handleOffset.y }
     const handleContact = bladeContact ? null : this.findPointContact(handlePoint, 5)
     const axeVelocity = { x: this.axe.vx, y: this.axe.vy }
     if (bladeContact && canAxeBoundAxeStick(bladeContact.object.material, axeVelocity, bladeContact.normal, this.axe.angle)) this.stickAxe(bladeContact)
@@ -244,10 +266,12 @@ export class AxeBoundController implements GameController {
   }
 
   private stickAxe(contact: Contact) {
+    this.axe.x += contact.normal.x * Math.max(0, contact.penetration - 1); this.axe.y += contact.normal.y * Math.max(0, contact.penetration - 1)
     this.axe.state = 'stuck'; this.axe.vx = 0; this.axe.vy = 0; this.axe.angularVelocity = 0; this.axe.stuckObjectId = contact.object.id
     this.axe.stuckLocal = toLocal({ x: this.axe.x, y: this.axe.y }, contact.transform)
     this.axe.stuckTime = 0
-    this.triggerFallingObject(contact.object); this.spawnImpact(this.axe.x, this.axe.y, contact.object.material, true); this.shake = .7; this.options.onImpact('perfect')
+    const blade = { x: this.axe.x + Math.cos(this.axe.angle) * AXE_BLADE_OFFSET, y: this.axe.y + Math.sin(this.axe.angle) * AXE_BLADE_OFFSET }
+    this.triggerFallingObject(contact.object); this.spawnImpact(blade.x, blade.y, contact.object.material, true); this.shake = .7; this.options.onImpact('perfect')
   }
 
   private bounceAxe(contact: Contact) {
@@ -277,6 +301,7 @@ export class AxeBoundController implements GameController {
 
   private findPointContact(point: AxeBoundPoint, radius: number) {
     for (const object of this.nearbyObjects(point.y, 100)) {
+      if (this.launchIgnoreTimer > 0 && object.id === this.launchIgnoreId) continue
       const contact = pointContact(point, radius, object, this.getTransform(object))
       if (contact) return contact
     }
@@ -341,6 +366,7 @@ export class AxeBoundController implements GameController {
     this.drawBackdrop(ctx)
     ctx.save()
     if (this.shake > 0) ctx.translate(Math.sin(this.elapsed * 90) * this.shake * 3, Math.cos(this.elapsed * 77) * this.shake * 2)
+    this.drawMapDecorations(ctx)
     for (const object of AXEBOUND_LEVEL_OBJECTS) this.drawObject(ctx, object)
     this.drawParticles(ctx); this.drawAxe(ctx); this.drawAim(ctx)
     ctx.restore()
@@ -350,13 +376,32 @@ export class AxeBoundController implements GameController {
 
   private worldToScreen(point: AxeBoundPoint): AxeBoundPoint { return { x: point.x * this.scale, y: (point.y - this.cameraY) * this.scale } }
   private drawBackdrop(ctx: CanvasRenderingContext2D) {
-    const gradient = ctx.createLinearGradient(0, 0, 0, this.h); gradient.addColorStop(0, '#05030c'); gradient.addColorStop(.55, '#0b0616'); gradient.addColorStop(1, this.theme.surface)
+    const gradient = ctx.createLinearGradient(0, 0, 0, this.h); gradient.addColorStop(0, '#04020a'); gradient.addColorStop(.5, '#090313'); gradient.addColorStop(1, '#160721')
     ctx.fillStyle = gradient; ctx.fillRect(0, 0, this.w, this.h)
-    const drift = -(this.cameraY * this.scale * .08) % 180
-    ctx.strokeStyle = 'rgba(91,28,112,.12)'; ctx.lineWidth = 2
-    for (let index = -1; index < 7; index++) { const y = index * 180 + drift; ctx.beginPath(); ctx.moveTo(this.w * .12, y); ctx.lineTo(this.w * .3, y + 90); ctx.lineTo(this.w * .2, y + 180); ctx.stroke(); ctx.beginPath(); ctx.moveTo(this.w * .88, y + 20); ctx.lineTo(this.w * .7, y + 105); ctx.stroke() }
-    ctx.fillStyle = 'rgba(222,49,162,.035)'
-    for (let index = 0; index < 20; index++) ctx.fillRect((index * 83) % this.w, (index * 137 + drift * .4) % this.h, 3, 26 + index % 4 * 12)
+    const drift = -(this.cameraY * this.scale * .22) % 28
+    ctx.strokeStyle = 'rgba(101,31,114,.1)'; ctx.lineWidth = 1
+    for (let row = -1; row < Math.ceil(this.h / 28) + 1; row++) {
+      const y = row * 28 + drift, offset = row % 2 ? 18 : 0
+      ctx.beginPath(); ctx.moveTo(26, y); ctx.lineTo(this.w - 26, y); ctx.stroke()
+      for (let x = 26 + offset; x < this.w - 26; x += 36) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 28); ctx.stroke() }
+    }
+    const shaft = ctx.createRadialGradient(this.w * .5, this.h * .48, this.w * .08, this.w * .5, this.h * .48, this.w * .58)
+    shaft.addColorStop(0, 'rgba(0,0,0,.02)'); shaft.addColorStop(.62, 'rgba(5,0,12,.15)'); shaft.addColorStop(1, 'rgba(0,0,0,.78)'); ctx.fillStyle = shaft; ctx.fillRect(0, 0, this.w, this.h)
+  }
+
+  private drawMapDecorations(ctx: CanvasRenderingContext2D) {
+    for (const lantern of MAP_LANTERNS) {
+      const point = this.worldToScreen(lantern); if (point.y < -40 || point.y > this.h + 40) continue
+      const glow = ctx.createRadialGradient(point.x, point.y, 1, point.x, point.y, 35); glow.addColorStop(0, 'rgba(255,172,39,.32)'); glow.addColorStop(1, 'rgba(255,40,137,0)')
+      ctx.fillStyle = glow; ctx.fillRect(point.x - 38, point.y - 38, 76, 76)
+      ctx.fillStyle = '#170817'; ctx.strokeStyle = '#f08c22'; ctx.lineWidth = 1.5; ctx.fillRect(point.x - 6, point.y - 9, 12, 18); ctx.strokeRect(point.x - 6, point.y - 9, 12, 18)
+      ctx.fillStyle = '#ffd04f'; ctx.fillRect(point.x - 2, point.y - 5, 4, 10)
+    }
+    for (const banner of MAP_BANNERS) {
+      const point = this.worldToScreen(banner); if (point.y < -80 || point.y > this.h + 80) continue
+      ctx.fillStyle = banner.color; ctx.strokeStyle = 'rgba(255,67,155,.5)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(point.x - 12, point.y - 34); ctx.lineTo(point.x + 12, point.y - 34); ctx.lineTo(point.x + 12, point.y + 28); ctx.lineTo(point.x, point.y + 18); ctx.lineTo(point.x - 12, point.y + 28); ctx.closePath(); ctx.fill(); ctx.stroke()
+      ctx.fillStyle = '#d78a31'; ctx.fillRect(point.x - 2, point.y - 15, 4, 24)
+    }
   }
 
   private drawObject(ctx: CanvasRenderingContext2D, object: AxeBoundLevelObject) {
@@ -375,22 +420,60 @@ export class AxeBoundController implements GameController {
     else if (object.type === 'polygon' && object.points) { ctx.moveTo(object.points[0].x, object.points[0].y); object.points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y)); ctx.closePath() }
     else ctx.roundRect(-object.width / 2, -object.height / 2, object.width, object.height, Math.min(12, object.height * .22))
     ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0
+    ctx.save(); ctx.clip()
     if (object.material === 'rock' || object.material === 'spikeRock') {
-      ctx.strokeStyle = object.material === 'rock' ? 'rgba(255,111,190,.34)' : 'rgba(128,40,96,.34)'; ctx.lineWidth = 2 / this.scale
-      for (let index = -1; index <= 1; index++) { ctx.beginPath(); ctx.moveTo(index * object.width * .2, -object.height * .34); ctx.lineTo(index * object.width * .2 + 11, 0); ctx.lineTo(index * object.width * .2 - 3, object.height * .3); ctx.stroke() }
+      ctx.strokeStyle = object.material === 'rock' ? 'rgba(255,72,160,.26)' : 'rgba(127,28,91,.22)'; ctx.lineWidth = 1.5 / this.scale
+      const brickHeight = 34, brickWidth = 54
+      for (let y = -object.height / 2 + brickHeight; y < object.height / 2; y += brickHeight) { ctx.beginPath(); ctx.moveTo(-object.width / 2, y); ctx.lineTo(object.width / 2, y); ctx.stroke() }
+      for (let row = 0, y = -object.height / 2; y < object.height / 2; row++, y += brickHeight) {
+        const offset = row % 2 ? brickWidth * .5 : 0
+        for (let x = -object.width / 2 + offset; x < object.width / 2; x += brickWidth) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, Math.min(y + brickHeight, object.height / 2)); ctx.stroke() }
+      }
     } else if (object.material === 'metal') {
-      ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 2 / this.scale; ctx.beginPath(); ctx.moveTo(-object.width * .35, 0); ctx.lineTo(object.width * .35, 0); ctx.stroke()
+      ctx.strokeStyle = 'rgba(190,205,240,.3)'; ctx.lineWidth = 2 / this.scale; ctx.beginPath(); ctx.moveTo(-object.width * .36, 0); ctx.lineTo(object.width * .36, 0); ctx.stroke()
+      ctx.fillStyle = '#8c91ad'; for (const x of [-object.width * .38, object.width * .38]) for (const y of [-object.height * .3, object.height * .3]) { ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill() }
     } else if (object.material === 'wood') {
-      ctx.strokeStyle = 'rgba(255,204,104,.35)'; ctx.lineWidth = 2 / this.scale; for (let x = -object.width * .3; x <= object.width * .3; x += 28) { ctx.beginPath(); ctx.moveTo(x, -object.height / 2); ctx.lineTo(x + 9, object.height / 2); ctx.stroke() }
+      ctx.strokeStyle = 'rgba(255,190,71,.4)'; ctx.lineWidth = 2 / this.scale; for (let x = -object.width * .4; x <= object.width * .4; x += 30) { ctx.beginPath(); ctx.moveTo(x, -object.height / 2); ctx.lineTo(x + 10, object.height / 2); ctx.stroke() }
+      ctx.fillStyle = '#d88624'; ctx.beginPath(); ctx.arc(-object.width * .42, 0, 5, 0, Math.PI * 2); ctx.arc(object.width * .42, 0, 5, 0, Math.PI * 2); ctx.fill()
+    } else if (object.material === 'crystal') {
+      ctx.strokeStyle = 'rgba(255,132,214,.52)'; ctx.lineWidth = 2 / this.scale
+      for (let x = -object.width * .35; x < object.width * .4; x += 38) { ctx.beginPath(); ctx.moveTo(x, object.height * .45); ctx.lineTo(x + 18, -object.height * .42); ctx.lineTo(x + 34, object.height * .2); ctx.stroke() }
+    } else if (object.material === 'ice') {
+      ctx.strokeStyle = 'rgba(113,221,255,.45)'; ctx.lineWidth = 2 / this.scale
+      for (let y = -object.height * .35; y < object.height * .4; y += 48) { ctx.beginPath(); ctx.moveTo(-object.width * .35, y); ctx.quadraticCurveTo(0, y + 18, object.width * .35, y); ctx.stroke() }
     }
-    ctx.restore()
+    ctx.restore(); ctx.restore()
     if (object.type === 'goal') { ctx.save(); ctx.globalCompositeOperation = 'lighter'; const glow = ctx.createRadialGradient(screen.x, screen.y, 4, screen.x, screen.y, 70); glow.addColorStop(0, 'rgba(255,244,154,.9)'); glow.addColorStop(1, 'rgba(255,217,73,0)'); ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(screen.x, screen.y, 70, 0, Math.PI * 2); ctx.fill(); ctx.restore() }
   }
 
   private drawAxe(ctx: CanvasRenderingContext2D) {
-    const point = this.worldToScreen(this.axe); ctx.save(); ctx.translate(point.x, point.y); ctx.rotate(this.axe.angle); ctx.scale(this.scale, this.scale)
-    ctx.strokeStyle = '#ffca45'; ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.shadowColor = '#ffae32'; ctx.shadowBlur = 14; ctx.beginPath(); ctx.moveTo(-AXE_HANDLE_LENGTH, 0); ctx.lineTo(-5, 0); ctx.stroke()
-    ctx.fillStyle = '#fff1a0'; ctx.beginPath(); ctx.moveTo(4, 0); ctx.quadraticCurveTo(-4, -22, -20, -18); ctx.lineTo(-10, 1); ctx.lineTo(-20, 18); ctx.quadraticCurveTo(-4, 22, 4, 0); ctx.fill(); ctx.restore()
+    const point = this.worldToScreen(this.axe), speed = Math.hypot(this.axe.vx, this.axe.vy)
+    if ((this.axe.state === 'flying' || this.axe.state === 'bouncing') && speed > 130) {
+      const nx = this.axe.vx / speed, ny = this.axe.vy / speed, trailLength = Math.min(96, speed * this.scale * .1)
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round'
+      const trails = [
+        { width: 18, color: 'rgba(117,18,132,.18)', length: 1 },
+        { width: 10, color: 'rgba(255,50,139,.3)', length: .78 },
+        { width: 4, color: 'rgba(255,181,42,.72)', length: .55 },
+      ]
+      for (const trail of trails) { ctx.strokeStyle = trail.color; ctx.lineWidth = trail.width; ctx.beginPath(); ctx.moveTo(point.x - nx * 5, point.y - ny * 5); ctx.lineTo(point.x - nx * trailLength * trail.length + ny * 5, point.y - ny * trailLength * trail.length - nx * 5); ctx.stroke() }
+      ctx.restore()
+    }
+    if (this.axe.state === 'stuck') {
+      const pulse = 10 + Math.sin(this.elapsed * 9) * 2; ctx.save(); ctx.strokeStyle = 'rgba(255,184,35,.48)'; ctx.shadowColor = '#ff8a24'; ctx.shadowBlur = 12; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(point.x, point.y, pulse, 0, Math.PI * 2); ctx.stroke(); ctx.restore()
+    }
+    ctx.save(); ctx.translate(point.x, point.y); ctx.rotate(this.axe.angle); ctx.scale(this.scale, this.scale); ctx.shadowColor = '#ff8e20'; ctx.shadowBlur = this.axe.state === 'flying' ? 13 / this.scale : 7 / this.scale
+    if (this.axeSprite?.complete && this.axeSprite.naturalWidth > 0) {
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(this.axeSprite, -49, -31, 96, 96)
+    } else {
+      ctx.strokeStyle = '#371636'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-8, 7); ctx.lineTo(AXE_HANDLE_TIP.x, AXE_HANDLE_TIP.y); ctx.stroke()
+      ctx.strokeStyle = '#9a4a83'; ctx.lineWidth = 3; for (let step = 0; step < 4; step++) { ctx.beginPath(); ctx.moveTo(-10 - step, 12 + step * 8); ctx.lineTo(-1 - step, 17 + step * 8); ctx.stroke() }
+      ctx.fillStyle = '#ffb326'; ctx.strokeStyle = '#fff0a0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-4, -2); ctx.lineTo(12, -21); ctx.quadraticCurveTo(35, -24, 34, -3); ctx.quadraticCurveTo(34, 18, 12, 25); ctx.lineTo(16, 5); ctx.closePath(); ctx.fill(); ctx.stroke()
+      ctx.fillStyle = '#f49a18'; ctx.beginPath(); ctx.moveTo(-7, -3); ctx.lineTo(-25, -13); ctx.lineTo(-18, 2); ctx.lineTo(-26, 13); ctx.closePath(); ctx.fill()
+      ctx.fillStyle = '#20162c'; ctx.strokeStyle = '#ef9d20'; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(-11, -10, 18, 21, 4); ctx.fill(); ctx.stroke()
+      ctx.strokeStyle = '#f2a021'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(AXE_HANDLE_TIP.x, AXE_HANDLE_TIP.y + 4, 7, 0, Math.PI * 2); ctx.stroke()
+    }
+    ctx.restore()
   }
 
   private drawParticles(ctx: CanvasRenderingContext2D) {
