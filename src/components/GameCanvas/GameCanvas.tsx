@@ -45,10 +45,10 @@ export function GameCanvas({ game, preview = false, active = true, paused = fals
       const dt = Math.min(.05, (time - last) / 1000); last = time; controller.update(dt); render()
     }
     const point = (event: PointerEvent) => { const rect = canvas.getBoundingClientRect(); return { x: event.clientX - rect.left, y: event.clientY - rect.top } }
-    let down: { x: number; y: number } | null = null
-    const handleDown = (event: PointerEvent) => { if (preview) return; canvas.setPointerCapture(event.pointerId); down = point(event); controller.pointerDown(down.x, down.y) }
-    const handleMove = (event: PointerEvent) => { if (preview || !down) return; const p = point(event); controller.pointerMove(p.x, p.y) }
-    const handleUp = (event: PointerEvent) => { if (preview || !down) return; const p = point(event); controller.pointerUp(p.x, p.y); down = null }
+    let down: { x: number; y: number; pointerId: number } | null = null
+    const handleDown = (event: PointerEvent) => { if (preview || down) return; canvas.setPointerCapture(event.pointerId); const p = point(event); down = { ...p, pointerId: event.pointerId }; controller.pointerDown(p.x, p.y) }
+    const handleMove = (event: PointerEvent) => { if (preview || !down || event.pointerId !== down.pointerId) return; const p = point(event); controller.pointerMove(p.x, p.y) }
+    const handleUp = (event: PointerEvent) => { if (preview || !down || event.pointerId !== down.pointerId) return; const p = point(event); controller.pointerUp(p.x, p.y); down = null }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (preview || event.repeat) return
       const directions: Record<string, [number, number]> = { ArrowUp: [0, -70], w: [0, -70], W: [0, -70], ArrowDown: [0, 70], s: [0, 70], S: [0, 70], ArrowLeft: [-70, 0], a: [-70, 0], A: [-70, 0], ArrowRight: [70, 0], d: [70, 0], D: [70, 0] }

@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { gameRegistry } from '../games/registry'
 
 describe('Flicko game registry', () => {
-  it('registers eight unique playable games', () => {
-    expect(gameRegistry).toHaveLength(8)
-    expect(new Set(gameRegistry.map((game) => game.id)).size).toBe(8)
+  it('registers nine unique playable games', () => {
+    expect(gameRegistry).toHaveLength(9)
+    expect(new Set(gameRegistry.map((game) => game.id)).size).toBe(9)
   })
 
   it.each(gameRegistry.map((game) => [game.id, game]))('%s includes a complete in-app play guide', (_id, game) => {

@@ -1,8 +1,8 @@
-export const APP_VERSION = '0.5.6'
+export const APP_VERSION = '0.6.0'
 
 export const UPDATE_INFO = {
-  title: '실제 플레이처럼 부드러운 미리보기',
-  description: '탐색 피드에서 현재 보이는 게임 미리보기가 기기 화면 주사율에 맞춰 실제 플레이처럼 부드럽게 재생됩니다.',
-  addedGames: ['hoop-flight', 'dunk-climb', 'loop-hoops', 'crossing-rush', 'neon-escape', 'perfect-stack', 'pin-core', 'pocket-golf'],
-  changes: ['미리보기 30fps 제한 제거', '기기 화면 주사율 동기화', '주변 미리보기 일시정지 유지'],
+  title: '새로운 물리 등반 게임 AXEBOUND',
+  description: '도끼를 직접 조준해 암벽에 박고, 물리 로프와 관성을 이용해 체크포인트 없는 THE HOLLOW SPIRE 정상에 도전하세요.',
+  addedGames: ['hoop-flight', 'dunk-climb', 'loop-hoops', 'crossing-rush', 'neon-escape', 'perfect-stack', 'pin-core', 'pocket-golf', 'axebound'],
+  changes: ['7,200 높이의 8구역 연속 맵', '재질·날·각도·속도 기반 도끼 충돌', '추락 중 세이브 던지기와 정상 완주'],
 } as const

@@ -93,6 +93,18 @@ const definitions: Definition[] = [
     failureConditions: ['게임 오버는 없으며 5번 홀을 넣으면 코스가 종료되고 총 타수가 확정됩니다.'],
     tips: ['직선 길이 막혔다면 코스 벽을 이용한 뱅크샷이 더 적은 타수일 수 있습니다.', '모래에서는 공이 급격히 느려지므로 다음 샷 위치를 만들 때 활용할 수 있습니다.', '홀을 너무 빠르게 지나가면 들어가지 않으므로 마지막 샷은 힘을 줄이세요.'],
   },
+  {
+    id: 'axebound', slug: 'axebound', title: 'AXEBOUND', kicker: 'CLIMB THE HOLLOW', icon: 'AX', category: 'Physics Climber',
+    scoreSuffix: 'm', recordOnExit: true,
+    shortDescription: '도끼를 던져 암벽에 박고, 흔들리는 몸을 끌어올려 끝없는 첨탑을 정복하세요.',
+    fullDescription: '화면을 드래그한 방향으로 도끼를 던집니다. 날이 바위나 나무에 올바른 각도와 속도로 닿으면 박히고, 빛나는 연결선이 몸을 물리적으로 끌어올립니다. 금속·수정·얼음·가시 바위에는 박히지 않습니다. 떨어져도 죽지 않으며 아래 지형에 자연스럽게 걸린 곳에서 즉시 다시 도전합니다.',
+    objective: '체크포인트 없이 하나로 연결된 THE HOLLOW SPIRE를 끝까지 올라 정상의 빛나는 제단에 도달하세요.',
+    theme: { background: '#07030e', surface: '#160821', accent: '#ffca45', accent2: '#ff359b', text: '#fff7db', muted: '#9c86ae', headerStyle: 'neon' },
+    controls: [{ label: '드래그', description: '화면 어디서든 원하는 투척 방향으로 직접 드래그합니다. 선의 길이가 도끼의 힘을 결정합니다.' }, { label: '놓기', description: '손을 놓으면 도끼가 실제 중력과 회전을 받으며 날아갑니다. 18px보다 짧은 드래그는 취소됩니다.' }, { label: '세이브 던지기', description: '흔들리거나 빠르게 추락하는 중에도 새 도끼를 던져 아래쪽 암벽을 잡을 수 있습니다.' }],
+    scoringRules: [{ label: '최고 높이', value: '시작 바닥 0m부터 정상 1000m까지 이번 등반에서 도달한 최고 높이를 기록' }, { label: '정상 도달', value: '정상 제단에 몸이 닿거나 도끼를 박고 가까이 올라가면 1000m 완주' }, { label: '추락', value: '점수는 유지되지만 실제 지형에 걸릴 때까지 올라온 거리를 잃음' }],
+    failureConditions: ['게임 오버와 즉사는 없습니다. 잘못 던지면 아래 지형 또는 시작 바닥까지 실제로 추락합니다.'],
+    tips: ['바위와 나무의 정면을 향해 충분한 속도로 날을 꽂아야 하며 손잡이 충돌이나 스치는 각도는 튕겨 나갑니다.', '도끼가 박힌 뒤 몸이 흔들리는 관성을 유지한 채 다음 도끼를 던지면 더 멀리 올라갈 수 있습니다.', '금속은 청색, 수정은 민트색, 얼음은 옅은 하늘색으로 빛나며 모두 도끼가 박히지 않습니다.', '큰 추락 중 넓은 측면 암벽을 향해 빠르게 세이브 던지기를 시도하세요.'],
+  },
 ]
 
 export const games: MiniGameModule[] = definitions.map((game) => ({

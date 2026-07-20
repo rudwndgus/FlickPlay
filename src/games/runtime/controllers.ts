@@ -1,5 +1,6 @@
 import type { ControllerOptions, GameController, GameStatus, GameTheme } from '../types'
 import { NeonVaultController } from './NeonVaultController'
+import { AxeBoundController } from './AxeBoundController'
 
 type Point = { x: number; y: number }
 const FIRE_STREAK = 3
@@ -1619,6 +1620,7 @@ export function createController(id: string, theme: GameTheme, options: Controll
     case 'perfect-stack': return new PerfectStackController(theme, options)
     case 'pin-core': return new PinCoreController(theme, options)
     case 'pocket-golf': return new PocketGolfController(theme, options)
+    case 'axebound': return new AxeBoundController(theme, options)
     default: throw new Error(`Unknown Flicko game: ${id}`)
   }
 }

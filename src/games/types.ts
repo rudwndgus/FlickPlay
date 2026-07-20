@@ -55,6 +55,7 @@ export interface MiniGameModule {
   category: string
   scoreDirection?: 'high' | 'low'
   scoreSuffix?: string
+  recordOnExit?: boolean
   objective: string
   theme: GameTheme
   controls: GameControlGuide[]

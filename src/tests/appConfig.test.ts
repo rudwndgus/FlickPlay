@@ -11,6 +11,6 @@ describe('app configuration', () => {
 
   it('publishes versioned update information', () => {
     expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+$/)
-    expect(UPDATE_INFO.addedGames).toHaveLength(8)
+    expect(UPDATE_INFO.addedGames).toHaveLength(9)
   })
 })
