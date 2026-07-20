@@ -51,12 +51,12 @@ describe('AXEBOUND physics', () => {
 
   it('sticks into a real rock and launches the same axe from that position', () => {
     const { controller } = makeController()
-    controller.axe.state = 'flying'; controller.axe.x = 197.5; controller.axe.y = 6475
+    controller.axe.state = 'flying'; controller.axe.x = 232.5; controller.axe.y = 6235
     controller.axe.vx = 0; controller.axe.vy = -500; controller.axe.angle = -Math.PI / 2; controller.axe.angularVelocity = 0; controller.axe.flightTime = 0
     controller.update(.04)
 
     expect(controller.axe.state).toBe('stuck')
-    expect(controller.axe.stuckObjectId).toBe('s2-left-02')
+    expect(controller.axe.stuckObjectId).toBe('s2-high-left')
 
     const anchor = { x: controller.axe.x, y: controller.axe.y }
     controller.pointerDown(300, 300); controller.pointerUp(300, 420)
@@ -107,7 +107,7 @@ describe('AXEBOUND physics', () => {
 
   it('collides with the attached platform instead of passing through when launched into it', () => {
     const { controller } = makeController()
-    controller.axe.state = 'flying'; controller.axe.x = 197.5; controller.axe.y = 6475
+    controller.axe.state = 'flying'; controller.axe.x = 232.5; controller.axe.y = 6235
     controller.axe.vx = 0; controller.axe.vy = -500; controller.axe.angle = -Math.PI / 2; controller.axe.angularVelocity = 0; controller.axe.flightTime = 0
     controller.update(.04)
     expect(controller.axe.state).toBe('stuck')
@@ -116,9 +116,9 @@ describe('AXEBOUND physics', () => {
     expect((controller as unknown as { launchIgnoreId: string | null }).launchIgnoreId).toBeNull()
     for (let index = 0; index < 8; index++) controller.update(.01)
 
-    expect(controller.axe.y).toBeGreaterThan(6435)
+    expect(controller.axe.y).toBeGreaterThan(6200)
     expect(controller.axe.state).toBe('stuck')
-    expect(controller.axe.stuckObjectId).toBe('s2-left-02')
+    expect(controller.axe.stuckObjectId).toBe('s2-high-left')
   })
 
   it('never ends the run because the axe falls onto lower terrain', () => {
@@ -134,8 +134,9 @@ describe('AXEBOUND physics', () => {
 
   it('finishes only after reaching the summit altar', () => {
     const { controller, onFinish } = makeController()
+    const goal = AXEBOUND_LEVEL_OBJECTS.find((object) => object.id === 'summit-goal')!
     controller.axe.state = 'flying'; controller.axe.stuckObjectId = null
-    controller.axe.x = 360; controller.axe.y = 85; controller.axe.vx = 0; controller.axe.vy = 0
+    controller.axe.x = goal.x; controller.axe.y = goal.y; controller.axe.vx = 0; controller.axe.vy = 0
     controller.update(.01)
 
     expect(controller.getStatus()).toBe('playing')
@@ -148,11 +149,11 @@ describe('AXEBOUND physics', () => {
   it('contains a continuous six-image world with both readable surface classes', () => {
     expect(new Set(AXEBOUND_LEVEL_OBJECTS.map((object) => object.id)).size).toBe(AXEBOUND_LEVEL_OBJECTS.length)
     expect(AXEBOUND_LEVEL_OBJECTS.some((object) => object.y > 7000)).toBe(true)
-    expect(AXEBOUND_LEVEL_OBJECTS.some((object) => object.y < 150)).toBe(true)
+    expect(AXEBOUND_LEVEL_OBJECTS.some((object) => object.y < 250)).toBe(true)
     expect(AXEBOUND_LEVEL_OBJECTS.some((object) => isAxeBoundStickable(object.material))).toBe(true)
     expect(AXEBOUND_LEVEL_OBJECTS.some((object) => !isAxeBoundStickable(object.material))).toBe(true)
-    const objectTypes = new Set(AXEBOUND_LEVEL_OBJECTS.map((object) => object.type))
-    for (const type of ['movingPlatform', 'rotatingBeam', 'swingingBlock', 'fallingRock', 'goal'] as const) expect(objectTypes.has(type)).toBe(true)
+    expect(AXEBOUND_LEVEL_OBJECTS.filter((object) => !object.id.startsWith('outer-')).length).toBeGreaterThanOrEqual(75)
+    expect(AXEBOUND_LEVEL_OBJECTS.some((object) => object.type === 'goal')).toBe(true)
   })
 
   it('stacks the six supplied map images in exact bottom-to-top order', () => {
@@ -160,7 +161,7 @@ describe('AXEBOUND physics', () => {
       '01 · FLOODED PIT', '02 · CRYSTAL RUINS', '03 · IRON SHAFT', '04 · CHANDELIER HALL', '05 · CRYSTAL ASCENT', '06 · THE CROWN',
     ])
     const ids = new Set(AXEBOUND_LEVEL_OBJECTS.map((object) => object.id))
-    for (const id of ['s1-moving-lift', 's2-falling-crate', 's3-rotating-beam', 's4-center-chandelier', 's5-hanging-lift', 'summit-goal']) expect(ids.has(id)).toBe(true)
+    for (const id of ['s1-top-bridge', 's2-top-left', 's3-upper-left', 's4-top-left', 's5-top-lift', 'summit-goal']) expect(ids.has(id)).toBe(true)
   })
 
   it('provides a summit route whose consecutive stickable targets stay in throw range', () => {

@@ -3,6 +3,10 @@ export const AXEBOUND_SECTION_HEIGHT = 1440
 export const AXEBOUND_WORLD_HEIGHT = 8640
 export const AXEBOUND_FLOOR_Y = 8520
 export const AXEBOUND_SUMMIT_Y = 100
+export const AXEBOUND_MAP_SOURCE_WIDTH = 941
+export const AXEBOUND_MAP_SOURCE_HEIGHT = 1672
+export const AXEBOUND_MAP_CROP_X = 110
+export const AXEBOUND_MAP_CROP_WIDTH = 720
 
 export type AxeBoundMaterial = 'rock' | 'wood' | 'metal' | 'crystal' | 'spikeRock' | 'ice'
 export type AxeBoundObjectType = 'rect' | 'circle' | 'polygon' | 'movingPlatform' | 'rotatingBeam' | 'swingingBlock' | 'fallingRock' | 'goal'
@@ -40,79 +44,76 @@ const rect = (
   type: AxeBoundObjectType = 'rect',
 ): AxeBoundLevelObject => ({ id, type, material, x: left + width / 2, y, width, height, rotation })
 
-const polygon = (id: string, material: AxeBoundMaterial, x: number, y: number, points: AxeBoundPoint[]): AxeBoundLevelObject => {
-  const xs = points.map((point) => point.x), ys = points.map((point) => point.y)
-  return { id, type: 'polygon', material, x, y, width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys), points, rotation: 0 }
-}
+const SOURCE_Y_SCALE = AXEBOUND_SECTION_HEIGHT / AXEBOUND_MAP_SOURCE_HEIGHT
+const MAP_COUNT = 6
+const imageTop = (image: number) => (MAP_COUNT - image) * AXEBOUND_SECTION_HEIGHT
+const sourceSurface = (image: number, id: string, material: AxeBoundMaterial, left: number, top: number, width: number, height = 34, type: AxeBoundObjectType = 'rect') =>
+  rect(id, material, left - AXEBOUND_MAP_CROP_X, imageTop(image) + (top + height / 2) * SOURCE_Y_SCALE, width, height * SOURCE_Y_SCALE, 0, type)
 
 export const AXEBOUND_LEVEL_OBJECTS: readonly AxeBoundLevelObject[] = [
-  // Six full-screen sections, ordered exactly like the six supplied images: 1 at the bottom, 6 at the summit.
-  rect('outer-left-s1', 'rock', -25, 7920, 100, 1440), rect('outer-right-s1', 'rock', 645, 7920, 100, 1440),
-  rect('outer-left-s2', 'rock', -10, 6480, 105, 1440), rect('outer-right-s2', 'rock', 625, 6480, 115, 1440),
-  rect('outer-left-s3', 'rock', -25, 5040, 100, 1440), rect('outer-right-s3', 'rock', 650, 5040, 95, 1440),
-  rect('outer-left-s4', 'rock', -20, 3600, 105, 1440), rect('outer-right-s4', 'rock', 635, 3600, 110, 1440),
-  rect('outer-left-s5', 'rock', -25, 2160, 100, 1440), rect('outer-right-s5', 'rock', 645, 2160, 100, 1440),
-  rect('outer-left-s6', 'rock', -20, 720, 105, 1440), rect('outer-right-s6', 'rock', 635, 720, 110, 1440),
+  ...Array.from({ length: MAP_COUNT }, (_, index) => {
+    const top = index * AXEBOUND_SECTION_HEIGHT
+    return [rect(`outer-left-s${MAP_COUNT - index}`, 'rock', -28, top + AXEBOUND_SECTION_HEIGHT / 2, 56, AXEBOUND_SECTION_HEIGHT), rect(`outer-right-s${MAP_COUNT - index}`, 'rock', 692, top + AXEBOUND_SECTION_HEIGHT / 2, 56, AXEBOUND_SECTION_HEIGHT)]
+  }).flat(),
 
-  // IMAGE 1 — flooded cavern, from the violet basin to the upper crystal bridge.
-  rect('start-floor', 'rock', 55, 8485, 175, 62), rect('section1-water', 'ice', 60, 8580, 600, 48),
-  polygon('s1-left-crystal', 'crystal', 120, 8290, [{ x: -65, y: 150 }, { x: -30, y: -150 }, { x: 35, y: -100 }, { x: 70, y: 145 }]),
-  polygon('s1-right-crystal', 'crystal', 605, 8140, [{ x: -70, y: 160 }, { x: -25, y: -140 }, { x: 45, y: -90 }, { x: 72, y: 145 }]),
-  rect('s1-right-lower', 'rock', 475, 8290, 190, 48), rect('s1-left-lower', 'rock', 75, 8120, 235, 48),
-  rect('s1-center-lower', 'rock', 350, 8010, 215, 48), rect('s1-left-middle', 'rock', 95, 7790, 230, 50),
-  rect('s1-right-middle', 'rock', 440, 7610, 225, 50), rect('s1-center-middle', 'wood', 360, 7470, 150, 34),
-  { ...rect('s1-moving-lift', 'wood', 280, 7300, 150, 32, 0, 'movingPlatform'), moveDistance: 160, moveDuration: 3400 },
-  rect('s1-left-upper', 'rock', 75, 7205, 310, 50), rect('s1-right-upper', 'rock', 505, 7160, 165, 50),
+  // Map 1: every visible floor and ledge, from the flooded basin upward.
+  sourceSurface(1, 's1-top-bridge', 'wood', 470, 48, 175, 30),
+  sourceSurface(1, 's1-upper-left', 'rock', 105, 205, 400, 42), sourceSurface(1, 's1-upper-center', 'wood', 390, 365, 120, 30),
+  sourceSurface(1, 's1-high-left', 'rock', 105, 520, 300, 44), sourceSurface(1, 's1-high-right', 'rock', 515, 650, 325, 44),
+  sourceSurface(1, 's1-mid-right', 'rock', 540, 820, 300, 44), sourceSurface(1, 's1-mid-left', 'rock', 110, 1035, 300, 44),
+  sourceSurface(1, 's1-low-right', 'rock', 490, 1115, 350, 44), sourceSurface(1, 's1-low-left', 'rock', 85, 1195, 190, 42),
+  sourceSurface(1, 's1-right-tower', 'rock', 620, 1375, 220, 46),
+  sourceSurface(1, 'start-floor', 'rock', 80, 1488, 320, 50), sourceSurface(1, 's1-bottom-right', 'rock', 585, 1488, 255, 50),
+  sourceSurface(1, 'section1-floor', 'rock', 80, 1530, 760, 58),
 
-  // IMAGE 2 — dense alternating crystal ledges and small central bridges.
-  rect('s2-left-bottom', 'rock', 70, 7080, 285, 48), rect('s2-right-bottom', 'rock', 500, 7010, 170, 48),
-  rect('s2-left-01', 'rock', 95, 6840, 235, 48), rect('s2-right-01', 'rock', 430, 6700, 220, 48),
-  rect('s2-center-01', 'wood', 320, 6550, 105, 30), rect('s2-left-02', 'rock', 70, 6420, 255, 48),
-  rect('s2-right-02', 'rock', 470, 6280, 195, 48), { ...rect('s2-falling-crate', 'wood', 325, 6150, 90, 42, 0, 'fallingRock'), triggerDelay: 520, resetDelay: 4200 },
-  rect('s2-left-03', 'rock', 100, 6020, 230, 48), rect('s2-right-03', 'rock', 430, 5900, 220, 48),
-  rect('s2-left-top', 'rock', 65, 5795, 285, 50), rect('s2-right-top', 'rock', 485, 5765, 180, 48),
-  polygon('s2-left-crystal', 'crystal', 115, 6450, [{ x: -55, y: 250 }, { x: -20, y: -245 }, { x: 38, y: -205 }, { x: 65, y: 230 }]),
-  polygon('s2-right-crystal', 'crystal', 600, 6310, [{ x: -62, y: 270 }, { x: -22, y: -250 }, { x: 45, y: -210 }, { x: 66, y: 250 }]),
+  // Map 2: the alternating crystal ruins.
+  sourceSurface(2, 's2-bottom-bridge', 'wood', 235, 1590, 500, 38),
+  sourceSurface(2, 's2-low-left', 'rock', 235, 1355, 205, 42), sourceSurface(2, 's2-low-right', 'rock', 525, 1275, 285, 42),
+  sourceSurface(2, 's2-lower-left', 'rock', 230, 1095, 295, 42), sourceSurface(2, 's2-lower-right', 'rock', 555, 975, 270, 42),
+  sourceSurface(2, 's2-center-left', 'rock', 235, 895, 205, 40), sourceSurface(2, 's2-center-crate', 'wood', 455, 930, 105, 38),
+  sourceSurface(2, 's2-center-right', 'rock', 510, 705, 315, 42), sourceSurface(2, 's2-center-step', 'wood', 438, 550, 125, 34),
+  sourceSurface(2, 's2-high-left', 'rock', 215, 485, 255, 42), sourceSurface(2, 's2-high-right', 'rock', 445, 325, 380, 42),
+  sourceSurface(2, 's2-top-left', 'rock', 235, 160, 260, 42),
 
-  // IMAGE 3 — iron lift shaft, scaffold rails and sparse metal landings.
-  rect('s3-bottom-catcher', 'rock', 295, 5710, 150, 50), rect('s3-right-lower', 'rock', 445, 5510, 205, 48),
-  rect('s3-left-lower', 'rock', 70, 5350, 275, 50), rect('s3-center-lower', 'metal', 335, 5190, 125, 36),
-  rect('s3-right-rail', 'metal', 545, 5100, 72, 520), rect('s3-left-rail', 'metal', 150, 5000, 65, 470),
-  rect('s3-left-mid', 'rock', 70, 5040, 180, 48), rect('s3-center-mid', 'rock', 260, 4880, 190, 48),
-  { ...rect('s3-rotating-beam', 'metal', 395, 4740, 240, 30, 0, 'rotatingBeam'), rotationSpeed: .16 },
-  rect('s3-right-mid', 'rock', 495, 4610, 170, 48), rect('s3-left-upper', 'rock', 80, 4475, 300, 50),
-  rect('s3-right-upper', 'rock', 490, 4360, 180, 48), polygon('s3-upper-crystal', 'crystal', 125, 4480, [{ x: -55, y: 170 }, { x: -20, y: -160 }, { x: 42, y: -120 }, { x: 62, y: 150 }]),
+  // Map 3: iron shaft scaffolds and small catch ledges.
+  sourceSurface(3, 's3-bottom-left', 'rock', 155, 1495, 325, 46), sourceSurface(3, 's3-bottom-right', 'rock', 535, 1445, 285, 44),
+  sourceSurface(3, 's3-low-step', 'metal', 425, 1315, 145, 34), sourceSurface(3, 's3-low-left', 'rock', 175, 1145, 325, 44),
+  sourceSurface(3, 's3-low-right', 'rock', 535, 975, 295, 44), sourceSurface(3, 's3-right-step', 'metal', 545, 1068, 90, 32),
+  sourceSurface(3, 's3-mid-left', 'rock', 190, 795, 305, 44), sourceSurface(3, 's3-mid-right', 'metal', 740, 875, 100, 34),
+  sourceSurface(3, 's3-left-step', 'metal', 165, 655, 105, 34), sourceSurface(3, 's3-right-landing', 'metal', 770, 595, 80, 34),
+  sourceSurface(3, 's3-center-crate', 'wood', 420, 555, 105, 42), sourceSurface(3, 's3-center-step', 'metal', 270, 475, 90, 30),
+  sourceSurface(3, 's3-upper-right', 'rock', 595, 305, 260, 44), sourceSurface(3, 's3-upper-left', 'wood', 185, 225, 300, 38),
 
-  // IMAGE 4 — chandelier hall with chained blocks and a central suspended platform.
-  rect('s4-left-bottom', 'rock', 70, 4260, 285, 50), rect('s4-right-bottom', 'rock', 500, 4160, 170, 48),
-  rect('s4-left-01', 'rock', 80, 4020, 235, 48), rect('s4-right-01', 'rock', 455, 3880, 210, 48),
-  { ...rect('s4-center-chandelier', 'wood', 270, 3710, 190, 38, 0, 'swingingBlock'), x: 365, anchorX: 365, anchorY: 3440, ropeLength: 270 },
-  { ...rect('s4-hanging-block-left', 'metal', 220, 3500, 90, 70, 0, 'swingingBlock'), x: 265, anchorX: 265, anchorY: 3290, ropeLength: 210 },
-  { ...rect('s4-hanging-block-right', 'metal', 470, 3430, 90, 70, 0, 'swingingBlock'), x: 515, anchorX: 515, anchorY: 3190, ropeLength: 240 },
-  rect('s4-left-02', 'rock', 65, 3560, 260, 50), rect('s4-right-02', 'rock', 485, 3380, 180, 48),
-  rect('s4-center-pillar', 'rock', 315, 3260, 120, 190), rect('s4-left-upper', 'rock', 80, 3080, 230, 48),
-  rect('s4-right-upper', 'rock', 500, 2940, 170, 48),
+  // Map 4: the chandelier hall, including every suspended landing.
+  sourceSurface(4, 's4-bottom-left', 'rock', 165, 1590, 315, 46), sourceSurface(4, 's4-bottom-right', 'rock', 745, 1525, 120, 42),
+  sourceSurface(4, 's4-low-right', 'rock', 520, 1445, 310, 44), sourceSurface(4, 's4-low-left', 'rock', 95, 1295, 320, 44),
+  sourceSurface(4, 's4-lower-right', 'rock', 610, 1290, 240, 44), sourceSurface(4, 's4-lower-left', 'rock', 90, 1145, 280, 42),
+  sourceSurface(4, 's4-right-step', 'rock', 680, 1070, 170, 42), sourceSurface(4, 's4-chandelier', 'wood', 420, 990, 220, 40),
+  sourceSurface(4, 's4-mid-left', 'rock', 90, 945, 325, 44), sourceSurface(4, 's4-hanging-left', 'metal', 190, 805, 175, 34),
+  sourceSurface(4, 's4-hanging-right', 'metal', 745, 810, 105, 34), sourceSurface(4, 's4-high-left', 'rock', 85, 695, 340, 44),
+  sourceSurface(4, 's4-high-center', 'wood', 235, 555, 205, 38), sourceSurface(4, 's4-high-right', 'rock', 745, 560, 110, 42),
+  sourceSurface(4, 's4-upper-center', 'wood', 315, 345, 205, 38), sourceSurface(4, 's4-upper-right', 'rock', 640, 345, 145, 42),
+  sourceSurface(4, 's4-top-left', 'rock', 65, 215, 250, 44), sourceSurface(4, 's4-top-right', 'rock', 755, 175, 120, 42),
 
-  // IMAGE 5 — tall crystal ascent with many narrow hanging walkways.
-  rect('s5-left-bottom', 'rock', 95, 2830, 245, 48), rect('s5-right-bottom', 'rock', 445, 2740, 210, 48),
-  { ...rect('s5-hanging-lift', 'wood', 330, 2600, 105, 32, 0, 'movingPlatform'), moveDistance: 150, moveDuration: 3000 },
-  rect('s5-left-01', 'rock', 70, 2480, 250, 48), rect('s5-right-01', 'rock', 465, 2360, 195, 48),
-  rect('s5-center-01', 'wood', 305, 2240, 115, 30), rect('s5-left-02', 'rock', 90, 2110, 220, 48),
-  rect('s5-right-02', 'rock', 430, 1980, 225, 48), rect('s5-center-02', 'wood', 325, 1870, 100, 30),
-  rect('s5-left-03', 'rock', 65, 1760, 270, 48), rect('s5-right-03', 'rock', 470, 1640, 190, 48),
-  rect('s5-top-bridge', 'wood', 265, 1495, 250, 34),
-  polygon('s5-left-crystal', 'crystal', 105, 2180, [{ x: -50, y: 300 }, { x: -15, y: -285 }, { x: 42, y: -235 }, { x: 62, y: 280 }]),
-  polygon('s5-right-crystal', 'crystal', 610, 2070, [{ x: -62, y: 310 }, { x: -20, y: -295 }, { x: 45, y: -230 }, { x: 65, y: 290 }]),
+  // Map 5: the dense crystal ascent.
+  sourceSurface(5, 's5-bottom-left', 'rock', 205, 1445, 245, 44), sourceSurface(5, 's5-bottom-right', 'rock', 495, 1395, 335, 44),
+  sourceSurface(5, 's5-bottom-lift', 'wood', 425, 1345, 120, 34), sourceSurface(5, 's5-low-left', 'rock', 205, 1145, 325, 44),
+  sourceSurface(5, 's5-low-center', 'wood', 495, 1115, 150, 36), sourceSurface(5, 's5-low-right', 'rock', 595, 1015, 245, 44),
+  sourceSurface(5, 's5-center-step', 'wood', 395, 945, 130, 34), sourceSurface(5, 's5-center-left', 'rock', 210, 745, 300, 44),
+  sourceSurface(5, 's5-center-right', 'rock', 690, 715, 160, 42), sourceSurface(5, 's5-high-left', 'rock', 195, 555, 225, 44),
+  sourceSurface(5, 's5-high-center', 'metal', 575, 545, 135, 34), sourceSurface(5, 's5-high-right', 'rock', 725, 515, 125, 42),
+  sourceSurface(5, 's5-upper-left', 'rock', 200, 315, 310, 44), sourceSurface(5, 's5-upper-right', 'rock', 550, 275, 300, 44),
+  sourceSurface(5, 's5-top-lift', 'wood', 440, 95, 220, 36),
 
-  // IMAGE 6 — final crown chamber; stepped lower ruins lead to the flaming altar.
-  rect('s6-left-bottom', 'rock', 70, 1390, 290, 50), rect('s6-right-bottom', 'rock', 510, 1280, 160, 48),
-  rect('s6-center-lower', 'rock', 315, 1160, 135, 46), rect('s6-left-lower', 'rock', 100, 1030, 235, 48),
-  rect('s6-right-lower', 'rock', 430, 900, 225, 48), rect('s6-center-mid', 'rock', 305, 760, 130, 46),
-  rect('s6-left-mid', 'rock', 105, 630, 210, 48), rect('s6-right-mid', 'rock', 485, 520, 180, 48),
-  rect('s6-center-upper', 'rock', 275, 390, 220, 50), rect('s6-hanging-bridge', 'wood', 300, 270, 230, 34),
-  rect('summit-platform', 'rock', 165, 150, 390, 62), { ...rect('summit-goal', 'rock', 310, 82, 100, 100, 0, 'goal'), x: 360 },
-  polygon('s6-left-crystal', 'crystal', 105, 700, [{ x: -55, y: 210 }, { x: -18, y: -200 }, { x: 40, y: -160 }, { x: 62, y: 195 }]),
-  polygon('s6-right-crystal', 'crystal', 610, 760, [{ x: -62, y: 220 }, { x: -20, y: -205 }, { x: 45, y: -165 }, { x: 65, y: 205 }]),
+  // Map 6: the final crown chamber.
+  sourceSurface(6, 's6-bottom-step', 'rock', 405, 1630, 205, 42), sourceSurface(6, 's6-bottom-left', 'rock', 95, 1390, 335, 46),
+  sourceSurface(6, 's6-bottom-right', 'rock', 690, 1390, 185, 44), sourceSurface(6, 's6-low-center', 'rock', 325, 1510, 255, 42),
+  sourceSurface(6, 's6-low-right', 'rock', 600, 1245, 250, 44), sourceSurface(6, 's6-lower-left', 'rock', 130, 995, 310, 44),
+  sourceSurface(6, 's6-lower-center', 'rock', 430, 995, 390, 44), sourceSurface(6, 's6-center-step', 'wood', 430, 895, 135, 34),
+  sourceSurface(6, 's6-mid-left', 'rock', 130, 745, 310, 44), sourceSurface(6, 's6-mid-right', 'rock', 680, 745, 135, 42),
+  sourceSurface(6, 's6-high-left', 'rock', 125, 645, 165, 42), sourceSurface(6, 's6-high-center', 'wood', 350, 645, 170, 36),
+  sourceSurface(6, 's6-high-right', 'rock', 735, 640, 130, 42), sourceSurface(6, 's6-upper-center', 'wood', 430, 445, 240, 38),
+  sourceSurface(6, 'summit-platform', 'rock', 240, 240, 470, 52), sourceSurface(6, 'summit-goal', 'rock', 420, 165, 110, 110, 'goal'),
 ]
 
 export const AXEBOUND_ZONES = [

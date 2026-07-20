@@ -2,6 +2,9 @@ import type { ControllerOptions, GameController, GameStatus, GameTheme } from '.
 import {
   AXEBOUND_FLOOR_Y,
   AXEBOUND_LEVEL_OBJECTS,
+  AXEBOUND_MAP_CROP_WIDTH,
+  AXEBOUND_MAP_CROP_X,
+  AXEBOUND_MAP_SOURCE_HEIGHT,
   AXEBOUND_SECTION_HEIGHT,
   AXEBOUND_SUMMIT_Y,
   AXEBOUND_WORLD_HEIGHT,
@@ -407,7 +410,7 @@ export class AxeBoundController implements GameController {
       const screenTop = (worldTop - this.cameraY) * this.scale
       const screenHeight = AXEBOUND_SECTION_HEIGHT * this.scale + 1
       if (screenTop > this.h || screenTop + screenHeight < 0) continue
-      ctx.drawImage(image, 0, screenTop, this.w, screenHeight)
+      ctx.drawImage(image, AXEBOUND_MAP_CROP_X, 0, AXEBOUND_MAP_CROP_WIDTH, AXEBOUND_MAP_SOURCE_HEIGHT, 0, screenTop, this.w, screenHeight)
     }
     ctx.restore()
   }
